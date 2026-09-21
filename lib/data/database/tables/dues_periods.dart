@@ -14,4 +14,9 @@ class DuesPeriods extends Table {
 
   @override
   Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+    {academicYearId, periodLabel}
+  ];
 }

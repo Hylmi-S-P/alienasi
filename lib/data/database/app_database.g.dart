@@ -2449,6 +2449,10 @@ class $DuesPeriodsTable extends DuesPeriods
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {academicYearId, periodLabel},
+  ];
+  @override
   DuesPeriod map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
     return DuesPeriod(
