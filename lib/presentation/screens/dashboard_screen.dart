@@ -7,6 +7,7 @@ import '../providers/app_providers.dart';
 import '../widgets/transaction_list_item.dart';
 import 'dialogs/backup_restore_dialog.dart';
 import 'dialogs/class_setup_dialog.dart';
+import 'dialogs/end_term_dialog.dart';
 import 'all_transactions_screen.dart';
 import 'transaction_form_screen.dart';
 
@@ -144,6 +145,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             onPressed: () {
                               BackupRestoreDialog.show(context, academicYear: activeYear);
                             },
+                          ),
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary, size: 20),
+                            tooltip: 'Menu Lainnya',
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            onSelected: (value) {
+                              if (value == 'end_term') {
+                                EndTermDialog.show(context, academicYear: activeYear);
+                              }
+                            },
+                            itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'end_term',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.flag_rounded, size: 18, color: AppColors.expenseText),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      'Akhiri Jabatan Bendahara',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                           IconButton(
                             icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary, size: 20),

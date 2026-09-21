@@ -521,11 +521,102 @@ class PdfReportService {
     ];
   }
 
+  @visibleForTesting
+  static List<pw.Widget> buildNoteSection({
+    required String note,
+    required pw.Font fontRegular,
+    required pw.Font fontBold,
+    required String signedBy,
+    required DateTime date,
+  }) {
+    return [
+      pw.SizedBox(height: 18),
+      pw.Divider(thickness: 1, color: PdfColor.fromHex('#CBD5E1')),
+      pw.SizedBox(height: 8),
+      pw.Row(
+        children: [
+          pw.Container(
+            width: 4,
+            height: 16,
+            decoration: pw.BoxDecoration(
+              color: PdfColor.fromHex('#D97706'),
+              borderRadius: pw.BorderRadius.circular(2),
+            ),
+          ),
+          pw.SizedBox(width: 8),
+          pw.Text(
+            'CATATAN BENDAHARA',
+            style: pw.TextStyle(font: fontBold, fontSize: 11, color: PdfColor.fromHex('#B45309')),
+          ),
+        ],
+      ),
+      pw.SizedBox(height: 6),
+      pw.Text(
+        'Catatan resmi yang ditulis langsung oleh bendahara kelas untuk kelengkapan laporan ini.',
+        style: pw.TextStyle(font: fontRegular, fontSize: 8.5, color: PdfColor.fromHex('#64748B')),
+      ),
+      pw.SizedBox(height: 8),
+      pw.Container(
+        width: double.infinity,
+        padding: const pw.EdgeInsets.all(12),
+        decoration: pw.BoxDecoration(
+          color: PdfColor.fromHex('#FFFBEB'),
+          borderRadius: pw.BorderRadius.circular(6),
+          border: pw.Border.all(color: PdfColor.fromHex('#FCD34D'), width: 1),
+        ),
+        child: pw.Text(
+          note,
+          style: pw.TextStyle(
+            font: fontRegular,
+            fontSize: 10,
+            color: PdfColor.fromHex('#1E293B'),
+            lineSpacing: 2,
+          ),
+        ),
+      ),
+      pw.SizedBox(height: 14),
+      pw.Align(
+        alignment: pw.Alignment.centerRight,
+        child: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.end,
+          children: [
+            pw.Text(
+              'Dibuat oleh,',
+              style: pw.TextStyle(font: fontRegular, fontSize: 9, color: PdfColor.fromHex('#475569')),
+            ),
+            pw.SizedBox(height: 28),
+            pw.Text(
+              signedBy,
+              style: pw.TextStyle(font: fontBold, fontSize: 10, color: PdfColor.fromHex('#0F172A')),
+            ),
+            pw.Container(
+              margin: const pw.EdgeInsets.only(top: 3),
+              padding: const pw.EdgeInsets.symmetric(horizontal: 2),
+              decoration: pw.BoxDecoration(
+                border: pw.Border(top: pw.BorderSide(color: PdfColor.fromHex('#94A3B8'), width: 0.7)),
+              ),
+              child: pw.Text(
+                'Bendahara Kelas',
+                style: pw.TextStyle(font: fontRegular, fontSize: 8, color: PdfColor.fromHex('#64748B')),
+              ),
+            ),
+            pw.SizedBox(height: 4),
+            pw.Text(
+              DateFormatter.toHumanDate(date),
+              style: pw.TextStyle(font: fontRegular, fontSize: 8, color: PdfColor.fromHex('#94A3B8')),
+            ),
+          ],
+        ),
+      ),
+    ];
+  }
+
   static Future<Uint8List> generateReportPdf({
     required AcademicYear academicYear,
     required String periodRangeTitle, // misal: "1 Bulan (1 Sep 2026 s/d 30 Sep 2026)"
     required List<TransactionWithCategory> items,
     List<StudentArrearsReportItem>? studentArrears,
+    String? customNote,
   }) async {
     final pdf = pw.Document();
 
@@ -693,7 +784,17 @@ class PdfReportService {
               fontSemiBold: fontSemiBold,
             ),
 
-          // 4. Lampiran Bukti Foto Nota (Jika ada transaksi berbukti fisik)
+          // 4. Seksi Catatan Bendahara (Jika customNote diisi)
+          if (customNote != null && customNote.trim().isNotEmpty)
+            ...buildNoteSection(
+              note: customNote.trim(),
+              fontRegular: fontRegular,
+              fontBold: fontBold,
+              signedBy: academicYear.treasurerName,
+              date: DateTime.now(),
+            ),
+
+          // 5. Lampiran Bukti Foto Nota (Jika ada transaksi berbukti fisik)
           if (receiptItems.isNotEmpty) ...[
             pw.SizedBox(height: 18),
             pw.Divider(thickness: 1, color: PdfColor.fromHex('#CBD5E1')),

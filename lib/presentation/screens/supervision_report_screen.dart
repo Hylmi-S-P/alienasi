@@ -15,6 +15,7 @@ import '../providers/app_providers.dart';
 import '../widgets/transaction_list_item.dart';
 import '../widgets/financial_chart_card.dart';
 import 'all_transactions_screen.dart';
+import 'dialogs/report_note_dialog.dart';
 
 class SupervisionReportScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBackToDashboard;
@@ -82,11 +83,15 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
   }
 
   Future<void> _sharePdf(AcademicYear academicYear) async {
+    final range = ref.read(selectedReportRangeProvider);
+    final rangeTitle = _getRangeTitle(range, academicYear);
+
+    final customNote = await ReportNoteDialog.show(context, rangeTitle: rangeTitle);
+    if (customNote == null) return; // dibatalkan
+
     setState(() => _isGenerating = true);
     try {
-      final range = ref.read(selectedReportRangeProvider);
       final txItems = ref.read(reportTransactionsProvider).value ?? [];
-      final rangeTitle = _getRangeTitle(range, academicYear);
       final studentArrears = await _loadStudentArrears(academicYear);
 
       final pdfBytes = await PdfReportService.generateReportPdf(
@@ -94,6 +99,7 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
         periodRangeTitle: rangeTitle,
         items: txItems,
         studentArrears: studentArrears,
+        customNote: customNote,
       );
 
       final safeRange = rangeTitle.replaceAll(' ', '_').replaceAll('(', '').replaceAll(')', '');
@@ -111,11 +117,15 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
   }
 
   Future<void> _previewPdf(AcademicYear academicYear) async {
+    final range = ref.read(selectedReportRangeProvider);
+    final rangeTitle = _getRangeTitle(range, academicYear);
+
+    final customNote = await ReportNoteDialog.show(context, rangeTitle: rangeTitle);
+    if (customNote == null) return; // dibatalkan
+
     setState(() => _isGenerating = true);
     try {
-      final range = ref.read(selectedReportRangeProvider);
       final txItems = ref.read(reportTransactionsProvider).value ?? [];
-      final rangeTitle = _getRangeTitle(range, academicYear);
       final studentArrears = await _loadStudentArrears(academicYear);
 
       final pdfBytes = await PdfReportService.generateReportPdf(
@@ -123,6 +133,7 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
         periodRangeTitle: rangeTitle,
         items: txItems,
         studentArrears: studentArrears,
+        customNote: customNote,
       );
 
       if (mounted) {
