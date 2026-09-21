@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/utils/currency_formatter.dart';
 import '../../../data/database/app_database.dart';
 import '../../providers/app_providers.dart';
 
@@ -36,11 +37,12 @@ class ClassSetupDialog extends ConsumerStatefulWidget {
 class _ClassSetupDialogState extends ConsumerState<ClassSetupDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _classNameController;
+  late final TextEditingController _academicYearController;
   late final TextEditingController _treasurerController;
   late final TextEditingController _supervisorController;
   late final TextEditingController _duesAmountController;
-  int _selectedGrade = 7;
-  String _selectedPeriodType = 'weekly';
+  late int _selectedGrade;
+  late String _selectedPeriodType;
   bool _isLoading = false;
 
   @override
@@ -50,6 +52,11 @@ class _ClassSetupDialogState extends ConsumerState<ClassSetupDialog> {
     _classNameController = TextEditingController(
       text: year?.name ?? 'Kelas 7A - SMP Negeri 1',
     );
+    _academicYearController = TextEditingController(
+      text: year != null
+          ? '${year.startDate.year}/${year.endDate.year}'
+          : '${DateTime.now().year}/${DateTime.now().year + 1}',
+    );
     _treasurerController = TextEditingController(
       text: year?.treasurerName ?? 'Fajar (Adik)',
     );
@@ -57,7 +64,9 @@ class _ClassSetupDialogState extends ConsumerState<ClassSetupDialog> {
       text: year?.supervisorName ?? 'Ibu Rina (Pengawas)',
     );
     _duesAmountController = TextEditingController(
-      text: year != null ? '${year.defaultDuesAmount}' : '5000',
+      text: year != null
+          ? CurrencyFormatter.format(year.defaultDuesAmount, includeSymbol: false)
+          : '5.000',
     );
     _selectedGrade = year?.grade ?? 7;
     _selectedPeriodType = year?.duesPeriodType ?? 'weekly';
@@ -66,6 +75,7 @@ class _ClassSetupDialogState extends ConsumerState<ClassSetupDialog> {
   @override
   void dispose() {
     _classNameController.dispose();
+    _academicYearController.dispose();
     _treasurerController.dispose();
     _supervisorController.dispose();
     _duesAmountController.dispose();
@@ -77,10 +87,24 @@ class _ClassSetupDialogState extends ConsumerState<ClassSetupDialog> {
 
     setState(() => _isLoading = true);
     try {
-      final now = DateTime.now();
-      final startDate = DateTime(now.year, 7, 1);
-      final endDate = DateTime(now.year + 1, 6, 30);
-      final duesAmount = int.tryParse(_duesAmountController.text) ?? 5000;
+      final reg = RegExp(r'^(\d{4})\s*/\s*(\d{4})$');
+      final match = reg.firstMatch(_academicYearController.text.trim());
+      int startYear = DateTime.now().year;
+      int endYear = DateTime.now().year + 1;
+      if (match != null) {
+        startYear = int.parse(match.group(1)!);
+        endYear = int.parse(match.group(2)!);
+      }
+      final startDate = DateTime(startYear, 7, 1);
+      final endDate = DateTime(endYear, 6, 30);
+      final duesAmount = CurrencyFormatter.parseAmount(_duesAmountController.text);
+      if (duesAmount <= 0) {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Nominal kas tidak valid')),
+        );
+        return;
+      }
 
       final repo = ref.read(academicYearRepoProvider);
       if (widget.existingYear != null) {
@@ -92,6 +116,8 @@ class _ClassSetupDialogState extends ConsumerState<ClassSetupDialog> {
           supervisorName: _supervisorController.text.trim(),
           defaultDuesAmount: duesAmount,
           duesPeriodType: _selectedPeriodType,
+          startDate: startDate,
+          endDate: endDate,
         );
 
         if (mounted) {
@@ -209,6 +235,34 @@ class _ClassSetupDialogState extends ConsumerState<ClassSetupDialog> {
                 ),
                 const SizedBox(height: 14),
 
+                // Tahun Ajaran
+                const Text(
+                  'Tahun Ajaran',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: 6),
+                TextFormField(
+                  controller: _academicYearController,
+                  decoration: const InputDecoration(
+                    hintText: 'Contoh: 2026/2027',
+                  ),
+                  validator: (v) {
+                    if (v == null || v.trim().isEmpty) return 'Tahun ajaran wajib diisi';
+                    final reg = RegExp(r'^(\d{4})\s*/\s*(\d{4})$');
+                    final match = reg.firstMatch(v.trim());
+                    if (match == null) {
+                      return 'Format tahun ajaran harus YYYY/YYYY (contoh: 2026/2027)';
+                    }
+                    final start = int.parse(match.group(1)!);
+                    final end = int.parse(match.group(2)!);
+                    if (end <= start) {
+                      return 'Tahun akhir harus lebih besar dari tahun awal (contoh: 2026/2027)';
+                    }
+                    return null;
+                  },
+                ),
+                const SizedBox(height: 14),
+
                 // Tingkat Kelas
                 const Text(
                   'Tingkat Kelas',
@@ -322,14 +376,17 @@ class _ClassSetupDialogState extends ConsumerState<ClassSetupDialog> {
                 TextFormField(
                   controller: _duesAmountController,
                   keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    ThousandSeparatorInputFormatter(),
+                  ],
                   decoration: const InputDecoration(
                     prefixText: 'Rp ',
-                    hintText: '5000',
+                    hintText: '5.000',
                   ),
                   validator: (v) {
                     if (v == null || v.trim().isEmpty) return 'Nominal wajib diisi';
-                    final parsed = int.tryParse(v);
-                    if (parsed == null || parsed <= 0) return 'Nominal tidak valid';
+                    final parsed = CurrencyFormatter.parseAmount(v);
+                    if (parsed <= 0) return 'Nominal tidak valid';
                     return null;
                   },
                 ),

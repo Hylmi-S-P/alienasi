@@ -13,18 +13,39 @@ class MainScaffold extends StatefulWidget {
 
 class _MainScaffoldState extends State<MainScaffold> {
   int _currentIndex = 0;
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   void _navigateToTab(int index) {
+    if (_currentIndex == index) return;
     setState(() => _currentIndex = index);
+    if (_pageController.hasClients) {
+      _pageController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final screens = [
-      DashboardScreen(onNavigateTab: _navigateToTab),
-      DuesCheckScreen(onBackToDashboard: () => _navigateToTab(0)),
-      TransactionFormScreen(initialType: 'expense', onBackToDashboard: () => _navigateToTab(0)),
-      SupervisionReportScreen(onBackToDashboard: () => _navigateToTab(0)),
+      _KeepAlivePage(child: DashboardScreen(onNavigateTab: _navigateToTab)),
+      _KeepAlivePage(child: DuesCheckScreen(onBackToDashboard: () => _navigateToTab(0))),
+      _KeepAlivePage(child: TransactionFormScreen(initialType: 'expense', onBackToDashboard: () => _navigateToTab(0))),
+      _KeepAlivePage(child: SupervisionReportScreen(onBackToDashboard: () => _navigateToTab(0))),
     ];
 
     return PopScope(
@@ -32,17 +53,21 @@ class _MainScaffoldState extends State<MainScaffold> {
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
         if (_currentIndex != 0) {
-          setState(() => _currentIndex = 0);
+          _navigateToTab(0);
         }
       },
       child: Scaffold(
-        body: IndexedStack(
-          index: _currentIndex,
+        body: PageView(
+          controller: _pageController,
+          physics: const ClampingScrollPhysics(),
+          onPageChanged: (index) {
+            setState(() => _currentIndex = index);
+          },
           children: screens,
         ),
         bottomNavigationBar: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
+          onTap: (index) => _navigateToTab(index),
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.dashboard_rounded),
@@ -64,5 +89,24 @@ class _MainScaffoldState extends State<MainScaffold> {
         ),
       ),
     );
+  }
+}
+
+class _KeepAlivePage extends StatefulWidget {
+  final Widget child;
+  const _KeepAlivePage({required this.child});
+
+  @override
+  State<_KeepAlivePage> createState() => _KeepAlivePageState();
+}
+
+class _KeepAlivePageState extends State<_KeepAlivePage> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
   }
 }

@@ -27,7 +27,6 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   final _amountController = TextEditingController();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
-  final DateTime _transactionDate = DateTime.now();
   String? _selectedCategoryId;
   String? _receiptImagePath;
   bool _isLoading = false;
@@ -56,15 +55,24 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   }
 
   void _addQuickAmount(int additional) {
-    final current = int.tryParse(_amountController.text.replaceAll('.', '')) ?? 0;
+    final current = CurrencyFormatter.parseAmount(_amountController.text);
     final updated = current + additional;
-    _amountController.text = '$updated';
+    final formatted = CurrencyFormatter.format(updated, includeSymbol: false);
+    _amountController.value = TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
   }
 
   Future<void> _pickImage(ImageSource source) async {
     try {
       final picker = ImagePicker();
-      final picked = await picker.pickImage(source: source, imageQuality: 70);
+      final picked = await picker.pickImage(
+        source: source,
+        imageQuality: 70,
+        maxWidth: 1280,
+        maxHeight: 1600,
+      );
       if (picked != null) {
         setState(() => _receiptImagePath = picked.path);
       }
@@ -86,8 +94,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       return;
     }
 
-    final rawAmount = int.tryParse(_amountController.text.replaceAll('.', ''));
-    if (rawAmount == null || rawAmount <= 0) {
+    final rawAmount = CurrencyFormatter.parseAmount(_amountController.text);
+    if (rawAmount <= 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Nominal transaksi tidak valid')),
       );
@@ -144,8 +152,13 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             title: _titleController.text.trim(),
             description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
             receiptImagePath: _receiptImagePath,
-            transactionDate: _transactionDate,
+            transactionDate: DateTime.now(),
           );
+
+      ref.invalidate(balanceStatsProvider);
+      ref.invalidate(recentTransactionsProvider);
+      ref.invalidate(reportTransactionsProvider);
+      ref.invalidate(currentPeriodSummaryProvider);
 
       if (mounted) {
         if (Navigator.canPop(context)) {
@@ -356,6 +369,9 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                     TextFormField(
                       controller: _amountController,
                       keyboardType: TextInputType.number,
+                      inputFormatters: [
+                        ThousandSeparatorInputFormatter(),
+                      ],
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w800,
@@ -368,8 +384,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       ),
                       validator: (v) {
                         if (v == null || v.trim().isEmpty) return 'Nominal wajib diisi';
-                        final num = int.tryParse(v.replaceAll('.', ''));
-                        if (num == null || num <= 0) return 'Nominal tidak valid';
+                        final num = CurrencyFormatter.parseAmount(v);
+                        if (num <= 0) return 'Nominal tidak valid';
                         if (num < 100) return 'Nominal minimal Rp 100';
                         if (num > 1000000000) return 'Nominal maksimal Rp 1.000.000.000';
                         return null;
@@ -521,7 +537,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Bukti Foto Nota Fisik',
+                          'Foto Nota',
                           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                         ),
                         if (_receiptImagePath != null)

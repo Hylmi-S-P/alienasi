@@ -2,17 +2,20 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../data/database/app_database.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../providers/app_providers.dart';
 
 class FinancialChartCard extends StatefulWidget {
   final List<TransactionWithCategory> items;
   final ReportDateRange selectedRange;
+  final AcademicYear? academicYear;
 
   const FinancialChartCard({
     super.key,
     required this.items,
     required this.selectedRange,
+    this.academicYear,
   });
 
   @override
@@ -24,17 +27,17 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
   int _categoryTabMode = 0; // 0: Pengeluaran, 1: Pemasukan
   int? _selectedBucketIndex;
 
-  @override
-  void didUpdateWidget(covariant FinancialChartCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.selectedRange != widget.selectedRange ||
-        oldWidget.items.length != widget.items.length) {
-      _selectedBucketIndex = null;
-    }
-  }
+  List<_ChartBucket>? _cachedBuckets;
+  int _cachedTotalIncome = 0;
+  int _cachedTotalExpense = 0;
 
   @override
-  Widget build(BuildContext context) {
+  void initState() {
+    super.initState();
+    _recomputeData();
+  }
+
+  void _recomputeData() {
     int totalIncome = 0;
     int totalExpense = 0;
     for (final it in widget.items) {
@@ -44,7 +47,25 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
         totalExpense += it.transaction.amount;
       }
     }
-    final netCashFlow = totalIncome - totalExpense;
+    _cachedTotalIncome = totalIncome;
+    _cachedTotalExpense = totalExpense;
+    _cachedBuckets = _groupTransactionsIntoBuckets();
+  }
+
+  @override
+  void didUpdateWidget(covariant FinancialChartCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedRange != widget.selectedRange ||
+        oldWidget.items.length != widget.items.length ||
+        oldWidget.items != widget.items) {
+      _selectedBucketIndex = null;
+      _recomputeData();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final netCashFlow = _cachedTotalIncome - _cachedTotalExpense;
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -96,7 +117,7 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
           else if (_chartMode == 0)
             _buildTrendBarChart(netCashFlow)
           else
-            _buildCategoryComposition(totalIncome, totalExpense),
+            _buildCategoryComposition(_cachedTotalIncome, _cachedTotalExpense),
         ],
       ),
     );
@@ -149,7 +170,7 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
   }
 
   Widget _buildTrendBarChart(int netCashFlow) {
-    final buckets = _groupTransactionsIntoBuckets();
+    final buckets = _cachedBuckets ?? _groupTransactionsIntoBuckets();
     int maxAmount = 1;
     for (final b in buckets) {
       maxAmount = max(maxAmount, max(b.income, b.expense));
@@ -229,76 +250,30 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
         // Bars Container
         SizedBox(
           height: 140,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: List.generate(buckets.length, (idx) {
-              final b = buckets[idx];
-              final isSelected = _selectedBucketIndex == idx;
-              final incomeRatio = (b.income / maxAmount).clamp(0.0, 1.0);
-              final expenseRatio = (b.expense / maxAmount).clamp(0.0, 1.0);
-
-              return Expanded(
-                child: GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedBucketIndex = (_selectedBucketIndex == idx) ? null : idx;
-                    });
-                  },
-                  child: Container(
-                    color: isSelected
-                        ? AppColors.brandPrimaryLight.withValues(alpha: 0.3)
-                        : Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              // Bar Pemasukan
-                              Flexible(
-                                child: Container(
-                                  height: max(4.0, 100 * incomeRatio),
-                                  decoration: BoxDecoration(
-                                    color: b.income > 0 ? AppColors.brandPrimary : AppColors.borderSubtle,
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 3),
-                              // Bar Pengeluaran
-                              Flexible(
-                                child: Container(
-                                  height: max(4.0, 100 * expenseRatio),
-                                  decoration: BoxDecoration(
-                                    color: b.expense > 0 ? AppColors.expenseText : AppColors.borderSubtle,
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          b.label,
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                            color: isSelected ? AppColors.brandPrimaryDark : AppColors.textSecondary,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
+          child: buckets.length <= 6
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: List.generate(
+                    buckets.length,
+                    (idx) => Expanded(
+                      child: _buildBarItem(buckets[idx], idx, maxAmount),
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: List.generate(
+                      buckets.length,
+                      (idx) => SizedBox(
+                        width: 44,
+                        child: _buildBarItem(buckets[idx], idx, maxAmount),
+                      ),
                     ),
                   ),
                 ),
-              );
-            }),
-          ),
         ),
         const Divider(height: 20, color: AppColors.borderSubtle),
 
@@ -503,53 +478,77 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
 
     switch (widget.selectedRange) {
       case ReportDateRange.oneMonth:
-        // Bagi bulan berjalan menjadi 4 interval mingguan berbasis kalender yang sinkron dengan penomoran minggu aplikasi:
-        // Mgg 1: tgl 1 - 7
-        // Mgg 2: tgl 8 - 14
-        // Mgg 3: tgl 15 - 21
-        // Mgg 4: tgl 22 - akhir bulan
-        final daysInMonth = DateTime(refDate.year, refDate.month + 1, 0).day;
-        final weekIntervals = [
-          (1, 7, 'Mgg 1'),
-          (8, 14, 'Mgg 2'),
-          (15, 21, 'Mgg 3'),
-          (22, daysInMonth, 'Mgg 4'),
-        ];
-
-        final monthStart = DateTime(refDate.year, refDate.month, 1, 0, 0, 0);
-        final monthEnd = DateTime(refDate.year, refDate.month, daysInMonth, 23, 59, 59);
-
-        for (var i = 0; i < weekIntervals.length; i++) {
-          final interval = weekIntervals[i];
-          final label = interval.$3;
-
-          var inc = 0;
-          var exp = 0;
-          for (final it in widget.items) {
-            final dt = it.transaction.transactionDate;
-            final isSameMonth = dt.year == refDate.year && dt.month == refDate.month;
-            
-            bool inRange = false;
-            if (isSameMonth) {
-              final weekIndex = ((dt.day - 1) ~/ 7);
-              final safeWeekIndex = weekIndex >= 3 ? 3 : weekIndex;
-              inRange = (safeWeekIndex == i);
-            } else if (i == 0 && dt.isBefore(monthStart)) {
-              // Transaksi sebelum bulan ini jika ada dalam rentang 30 hari dimasukkan ke bucket pertama
-              inRange = true;
-            } else if (i == 3 && dt.isAfter(monthEnd)) {
-              inRange = true;
-            }
-
-            if (inRange) {
-              if (it.transaction.type == 'income') {
-                inc += it.transaction.amount;
-              } else {
-                exp += it.transaction.amount;
+        final periodType = widget.academicYear?.duesPeriodType ?? 'weekly';
+        if (periodType == 'daily') {
+          // Frekuensi Harian: tampilkan batang per hari dalam bulan ini
+          final daysInMonth = DateTime(refDate.year, refDate.month + 1, 0).day;
+          for (var d = 1; d <= daysInMonth; d++) {
+            final label = '$d';
+            var inc = 0;
+            var exp = 0;
+            for (final it in widget.items) {
+              final dt = it.transaction.transactionDate;
+              if (dt.year == refDate.year && dt.month == refDate.month && dt.day == d) {
+                if (it.transaction.type == 'income') {
+                  inc += it.transaction.amount;
+                } else {
+                  exp += it.transaction.amount;
+                }
               }
             }
+            buckets.add(_ChartBucket(label: label, income: inc, expense: exp));
           }
-          buckets.add(_ChartBucket(label: label, income: inc, expense: exp));
+        } else {
+          // Frekuensi Mingguan / Bulanan: Bagi bulan berjalan menjadi interval mingguan
+          // Mgg 1: tgl 1 - 7
+          // Mgg 2: tgl 8 - 14
+          // Mgg 3: tgl 15 - 21
+          // Mgg 4: tgl 22 - 28 (atau s/d akhir bulan jika 28 hari)
+          // Mgg 5: tgl 29 - akhir bulan (jika bulan memiliki 29-31 hari)
+          final daysInMonth = DateTime(refDate.year, refDate.month + 1, 0).day;
+          final weekIntervals = <(int, int, String)>[
+            (1, 7, 'Mgg 1'),
+            (8, 14, 'Mgg 2'),
+            (15, 21, 'Mgg 3'),
+            (22, daysInMonth <= 28 ? daysInMonth : 28, 'Mgg 4'),
+            if (daysInMonth > 28) (29, daysInMonth, 'Mgg 5'),
+          ];
+
+          final monthStart = DateTime(refDate.year, refDate.month, 1, 0, 0, 0);
+          final monthEnd = DateTime(refDate.year, refDate.month, daysInMonth, 23, 59, 59);
+
+          for (var i = 0; i < weekIntervals.length; i++) {
+            final interval = weekIntervals[i];
+            final label = interval.$3;
+
+            var inc = 0;
+            var exp = 0;
+            for (final it in widget.items) {
+              final dt = it.transaction.transactionDate;
+              final isSameMonth = dt.year == refDate.year && dt.month == refDate.month;
+              
+              bool inRange = false;
+              if (isSameMonth) {
+                final weekIndex = ((dt.day - 1) ~/ 7);
+                final maxWeekIndex = weekIntervals.length - 1;
+                final safeWeekIndex = weekIndex >= maxWeekIndex ? maxWeekIndex : weekIndex;
+                inRange = (safeWeekIndex == i);
+              } else if (i == 0 && dt.isBefore(monthStart)) {
+                inRange = true;
+              } else if (i == weekIntervals.length - 1 && dt.isAfter(monthEnd)) {
+                inRange = true;
+              }
+
+              if (inRange) {
+                if (it.transaction.type == 'income') {
+                  inc += it.transaction.amount;
+                } else {
+                  exp += it.transaction.amount;
+                }
+              }
+            }
+            buckets.add(_ChartBucket(label: label, income: inc, expense: exp));
+          }
         }
         break;
 
@@ -562,7 +561,6 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
           var exp = 0;
           for (final it in widget.items) {
             final dt = it.transaction.transactionDate;
-            // Jika bucket tertua (i == 2), sertakan semua transaksi sebelum nextMDate
             final matches = (i == 2)
                 ? dt.isBefore(nextMDate)
                 : (!dt.isBefore(mDate) && dt.isBefore(nextMDate));
@@ -579,21 +577,17 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
         break;
 
       case ReportDateRange.oneYear:
-        const count = 6;
-        for (var i = count - 1; i >= 0; i--) {
-          final mDate = DateTime(refDate.year, refDate.month - (i * 2), 1);
-          final nextMDate = DateTime(refDate.year, refDate.month - (i * 2) + 2, 1);
-          final startName = monthNames[(mDate.month - 1) % 12];
-          final endName = monthNames[(nextMDate.month - 2 + 12) % 12];
-          final label = '$startName-$endName';
+        // 12 Bulan kalender berurutan mulai dari bulan awal (Januari) di sebelah kiri
+        // hingga Desember: Jan, Feb, Mar, Apr, Mei, Jun, Jul, Agu, Sep, Okt, Nov, Des
+        for (var m = 0; m < 12; m++) {
+          final targetMonthNum = m + 1;
+          final label = monthNames[m];
+
           var inc = 0;
           var exp = 0;
           for (final it in widget.items) {
             final dt = it.transaction.transactionDate;
-            final matches = (i == count - 1)
-                ? dt.isBefore(nextMDate)
-                : (!dt.isBefore(mDate) && dt.isBefore(nextMDate));
-            if (matches) {
+            if (dt.month == targetMonthNum) {
               if (it.transaction.type == 'income') {
                 inc += it.transaction.amount;
               } else {
@@ -606,43 +600,118 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
         break;
 
       case ReportDateRange.allTime:
-        // Bagi seluruh rentang waktu transaksi yang ada menjadi 4-6 bucket interval
-        final spanStart = DateTime(minTxDate.year, minTxDate.month, minTxDate.day);
-        final spanEnd = DateTime(maxTxDate.year, maxTxDate.month, maxTxDate.day, 23, 59, 59);
-        final totalSpanMs = max(spanEnd.difference(spanStart).inMilliseconds, 1);
-        final bucketCount = min(6, max(3, widget.items.length > 5 ? 5 : 3));
-        final bucketMs = (totalSpanMs / bucketCount).round();
-
-        for (var i = 0; i < bucketCount; i++) {
-          final bStart = spanStart.add(Duration(milliseconds: i * bucketMs));
-          final bEnd = (i == bucketCount - 1)
-              ? spanEnd.add(const Duration(seconds: 1))
-              : spanStart.add(Duration(milliseconds: (i + 1) * bucketMs));
-
-          final label = (bStart.year != bEnd.year)
-              ? '${bStart.year}'
-              : '${monthNames[(bStart.month - 1) % 12]} \'${bStart.year.toString().substring(2)}';
-
-          var inc = 0;
-          var exp = 0;
-          for (final it in widget.items) {
-            final dt = it.transaction.transactionDate;
-            final inRange = (dt.isAfter(bStart.subtract(const Duration(seconds: 1))) || dt.isAtSameMomentAs(bStart)) &&
-                dt.isBefore(bEnd);
-            if (inRange) {
-              if (it.transaction.type == 'income') {
-                inc += it.transaction.amount;
-              } else {
-                exp += it.transaction.amount;
+        // Semua Tahun: kelompokkan per tahun kalender jika terdapat riwayat tahun berbeda
+        final yearsSet = <int>{};
+        for (final it in widget.items) {
+          yearsSet.add(it.transaction.transactionDate.year);
+        }
+        if (widget.academicYear != null) {
+          yearsSet.add(widget.academicYear!.startDate.year);
+          yearsSet.add(widget.academicYear!.endDate.year);
+        }
+        final sortedYears = yearsSet.toList()..sort();
+        if (sortedYears.length > 1) {
+          for (final y in sortedYears) {
+            var inc = 0;
+            var exp = 0;
+            for (final it in widget.items) {
+              if (it.transaction.transactionDate.year == y) {
+                if (it.transaction.type == 'income') {
+                  inc += it.transaction.amount;
+                } else {
+                  exp += it.transaction.amount;
+                }
               }
             }
+            buckets.add(_ChartBucket(label: '$y', income: inc, expense: exp));
           }
-          buckets.add(_ChartBucket(label: label, income: inc, expense: exp));
+        } else {
+          // Jika hanya ada 1 tahun data: tampilkan 12 bulan secara berurutan agar grafik informatif
+          final singleYear = sortedYears.isNotEmpty ? sortedYears.first : refDate.year;
+          for (var m = 0; m < 12; m++) {
+            final label = monthNames[m];
+            var inc = 0;
+            var exp = 0;
+            for (final it in widget.items) {
+              final dt = it.transaction.transactionDate;
+              if (dt.month == m + 1 && dt.year == singleYear) {
+                if (it.transaction.type == 'income') {
+                  inc += it.transaction.amount;
+                } else {
+                  exp += it.transaction.amount;
+                }
+              }
+            }
+            buckets.add(_ChartBucket(label: label, income: inc, expense: exp));
+          }
         }
         break;
     }
 
     return buckets;
+  }
+
+  Widget _buildBarItem(_ChartBucket b, int idx, int maxAmount) {
+    final isSelected = _selectedBucketIndex == idx;
+    final incomeRatio = (b.income / maxAmount).clamp(0.0, 1.0);
+    final expenseRatio = (b.expense / maxAmount).clamp(0.0, 1.0);
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedBucketIndex = (_selectedBucketIndex == idx) ? null : idx;
+        });
+      },
+      child: Container(
+        color: isSelected ? AppColors.brandPrimaryLight.withValues(alpha: 0.3) : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  // Bar Pemasukan
+                  Flexible(
+                    child: Container(
+                      height: max(4.0, 100 * incomeRatio),
+                      decoration: BoxDecoration(
+                        color: b.income > 0 ? AppColors.brandPrimary : AppColors.borderSubtle,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  // Bar Pengeluaran
+                  Flexible(
+                    child: Container(
+                      height: max(4.0, 100 * expenseRatio),
+                      decoration: BoxDecoration(
+                        color: b.expense > 0 ? AppColors.expenseText : AppColors.borderSubtle,
+                        borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              b.label,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: isSelected ? AppColors.brandPrimaryDark : AppColors.textSecondary,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

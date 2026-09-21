@@ -5,8 +5,9 @@ import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../providers/app_providers.dart';
 import '../widgets/transaction_list_item.dart';
-import 'dialogs/advance_grade_dialog.dart';
+import 'dialogs/backup_restore_dialog.dart';
 import 'dialogs/class_setup_dialog.dart';
+import 'all_transactions_screen.dart';
 import 'transaction_form_screen.dart';
 
 class DashboardScreen extends ConsumerStatefulWidget {
@@ -26,7 +27,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final activeYearAsync = ref.watch(activeAcademicYearProvider);
     final statsAsync = ref.watch(balanceStatsProvider);
     final recentTxAsync = ref.watch(recentTransactionsProvider);
-    final duesSummaryAsync = ref.watch(activePeriodSummaryProvider);
+    final duesSummaryAsync = ref.watch(currentPeriodSummaryProvider);
 
     return activeYearAsync.when(
       loading: () => const Scaffold(
@@ -88,7 +89,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               onRefresh: () async {
                 ref.invalidate(balanceStatsProvider);
                 ref.invalidate(recentTransactionsProvider);
-                ref.invalidate(activePeriodSummaryProvider);
+                ref.invalidate(currentPeriodSummaryProvider);
               },
               child: SingleChildScrollView(
                 physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
@@ -137,37 +138,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               ],
                             ),
                           ),
-                          PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary),
-                            onSelected: (val) {
-                              if (val == 'advance') {
-                                AdvanceGradeDialog.show(context, activeYear);
-                              } else if (val == 'edit') {
-                                ClassSetupDialog.show(context, isDismissible: true, existingYear: activeYear);
-                              }
+                          IconButton(
+                            icon: const Icon(Icons.cloud_sync_outlined, color: AppColors.brandPrimary, size: 20),
+                            tooltip: 'Cadangkan & Pulihkan Data',
+                            onPressed: () {
+                              BackupRestoreDialog.show(context, academicYear: activeYear);
                             },
-                            itemBuilder: (context) => [
-                              const PopupMenuItem(
-                                value: 'advance',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.upgrade_rounded, color: AppColors.brandPrimary, size: 20),
-                                    SizedBox(width: 8),
-                                    Text('Naik Kelas Baru', style: TextStyle(fontSize: 13)),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'edit',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.edit_rounded, color: AppColors.textSecondary, size: 20),
-                                    SizedBox(width: 8),
-                                    Text('Edit Info Kelas', style: TextStyle(fontSize: 13)),
-                                  ],
-                                ),
-                              ),
-                            ],
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, color: AppColors.textSecondary, size: 20),
+                            tooltip: 'Edit Info Kelas',
+                            onPressed: () {
+                              ClassSetupDialog.show(context, isDismissible: true, existingYear: activeYear);
+                            },
                           ),
                         ],
                       ),
@@ -217,16 +200,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Row(
-                                        children: [
+                                      Row(
+                                        children: const [
                                           Icon(Icons.arrow_downward_rounded, size: 12, color: AppColors.incomeText),
                                           SizedBox(width: 4),
-                                          Text(
-                                            'Kas Masuk Bulan Ini',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.incomeText,
+                                          Expanded(
+                                            child: Text(
+                                              'Kas Masuk Bulan Ini',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.incomeText,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
                                         ],
@@ -257,16 +243,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Row(
-                                        children: [
+                                      Row(
+                                        children: const [
                                           Icon(Icons.arrow_upward_rounded, size: 12, color: AppColors.expenseText),
                                           SizedBox(width: 4),
-                                          Text(
-                                            'Kas Keluar Bulan Ini',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.expenseText,
+                                          Expanded(
+                                            child: Text(
+                                              'Kas Keluar Bulan Ini',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppColors.expenseText,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
                                         ],
@@ -423,21 +412,27 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                     const SizedBox(height: 14),
 
-                    // 5. Riwayat Transaksi Terakhir
+                    // 5. Riwayat Pencatatan Terkini
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Transaksi Terakhir',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
+                        const Expanded(
+                          child: Text(
+                            'Riwayat Pencatatan Terkini',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                            ),
                           ),
                         ),
                         TextButton(
                           onPressed: () {
-                            if (widget.onNavigateTab != null) widget.onNavigateTab!(3); // Laporan tab
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => AllTransactionsScreen(academicYear: activeYear),
+                              ),
+                            );
                           },
                           child: const Text(
                             'Lihat Semua',
@@ -475,7 +470,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       )
                     else
-                      ...recentItems.map((item) => TransactionListItem(item: item)),
+                      ...recentItems.take(5).map((item) => TransactionListItem(key: ValueKey(item.transaction.id), item: item)),
 
                     const SizedBox(height: 24),
                   ],

@@ -65,6 +65,27 @@ final recentTransactionsProvider = StreamProvider<List<TransactionWithCategory>>
   return ref.watch(transactionRepoProvider).watchRecentTransactions(academicYearId: activeYear.id, limit: 5);
 });
 
+// All Transactions (AllTransactionsScreen)
+final allTransactionsProvider = StreamProvider<List<TransactionWithCategory>>((ref) {
+  final activeYear = ref.watch(activeAcademicYearProvider).value;
+  if (activeYear == null) return Stream.value([]);
+  return ref.watch(transactionRepoProvider).watchAllTransactions(academicYearId: activeYear.id);
+});
+
+final allTransactionsByYearProvider = StreamProvider.family<List<TransactionWithCategory>, String>((ref, yearId) {
+  return ref.watch(transactionRepoProvider).watchAllTransactions(academicYearId: yearId);
+});
+
+// All Categories (Income + Expense)
+final categoriesProvider = StreamProvider<List<Category>>((ref) {
+  final incomeAsync = ref.watch(categoriesStreamProvider('income'));
+  final expenseAsync = ref.watch(categoriesStreamProvider('expense'));
+  final income = incomeAsync.value ?? [];
+  final expense = expenseAsync.value ?? [];
+  return Stream.value([...income, ...expense]);
+});
+
+
 String formatPeriodLabel(DateTime date, String periodType) {
   const monthNames = [
     'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
@@ -95,27 +116,53 @@ class PeriodOffsetNotifier extends Notifier<int> {
 final periodOffsetProvider =
     NotifierProvider<PeriodOffsetNotifier, int>(PeriodOffsetNotifier.new);
 
+class SelectedPeriodDateNotifier extends Notifier<DateTime?> {
+  @override
+  DateTime? build() => null; // null = dynamic auto-update based on DateTime.now()
+
+  void selectDate(DateTime date) => state = date;
+  void resetToToday() => state = null;
+}
+
+final selectedPeriodDateProvider =
+    NotifierProvider<SelectedPeriodDateNotifier, DateTime?>(SelectedPeriodDateNotifier.new);
+
 // Dues: Active Period Provider
 final activeDuesPeriodProvider = StreamProvider<DuesPeriod?>((ref) {
   final activeYear = ref.watch(activeAcademicYearProvider).value;
   if (activeYear == null) return Stream.value(null);
 
-  final duesRepo = ref.watch(duesRepoProvider);
+  final customSelectedDate = ref.watch(selectedPeriodDateProvider);
   final offset = ref.watch(periodOffsetProvider);
+
+  if (customSelectedDate == null && offset == 0) {
+    final currentAsync = ref.watch(currentDuesPeriodProvider);
+    return currentAsync.when(
+      data: (data) => Stream.value(data),
+      error: (err, st) => Stream.error(err, st),
+      loading: () => const Stream.empty(),
+    );
+  }
+
+  final duesRepo = ref.watch(duesRepoProvider);
   final now = DateTime.now();
 
   late DateTime targetDate;
-  switch (activeYear.duesPeriodType) {
-    case 'daily':
-      targetDate = now.add(Duration(days: offset));
-      break;
-    case 'monthly':
-      targetDate = DateTime(now.year, now.month + offset, 1);
-      break;
-    case 'weekly':
-    default:
-      targetDate = now.add(Duration(days: offset * 7));
-      break;
+  if (customSelectedDate != null) {
+    targetDate = customSelectedDate;
+  } else {
+    switch (activeYear.duesPeriodType) {
+      case 'daily':
+        targetDate = DateTime(now.year, now.month, now.day + offset);
+        break;
+      case 'monthly':
+        targetDate = DateTime(now.year, now.month + offset, 1);
+        break;
+      case 'weekly':
+      default:
+        targetDate = DateTime(now.year, now.month, now.day + (offset * 7));
+        break;
+    }
   }
 
   final label = formatPeriodLabel(targetDate, activeYear.duesPeriodType);
@@ -124,7 +171,41 @@ final activeDuesPeriodProvider = StreamProvider<DuesPeriod?>((ref) {
     academicYearId: activeYear.id,
     periodLabel: label,
     targetAmount: activeYear.defaultDuesAmount,
+    dueDate: targetDate,
   );
+});
+
+// Dues: Current Period Provider (Fixed offset 0 for Dashboard - always shows running period)
+final currentDuesPeriodProvider = StreamProvider<DuesPeriod?>((ref) {
+  final activeYear = ref.watch(activeAcademicYearProvider).value;
+  if (activeYear == null) return Stream.value(null);
+
+  final duesRepo = ref.watch(duesRepoProvider);
+  final now = DateTime.now();
+  final targetDate = DateTime(now.year, now.month, now.day);
+  final label = formatPeriodLabel(targetDate, activeYear.duesPeriodType);
+
+  return duesRepo.watchActivePeriod(
+    academicYearId: activeYear.id,
+    periodLabel: label,
+    targetAmount: activeYear.defaultDuesAmount,
+    dueDate: targetDate,
+  );
+});
+
+// Dues: Current Period Summary (Always shows current period for Dashboard)
+final currentPeriodSummaryProvider = StreamProvider.autoDispose<DuesPeriodSummary?>((ref) {
+  final activeYear = ref.watch(activeAcademicYearProvider).value;
+  final currentPeriod = ref.watch(currentDuesPeriodProvider).value;
+
+  if (activeYear == null || currentPeriod == null) {
+    return Stream.value(null);
+  }
+
+  return ref.watch(duesRepoProvider).watchPeriodSummary(
+        period: currentPeriod,
+        academicYearId: activeYear.id,
+      );
 });
 
 // Dues: Student List Stream for Active Period
@@ -142,7 +223,7 @@ final activePeriodStudentsProvider = StreamProvider.autoDispose<List<StudentDues
       );
 });
 
-// Dues: Period Summary
+// Dues: Period Summary for currently viewed period in Kas Siswa
 final activePeriodSummaryProvider = StreamProvider.autoDispose<DuesPeriodSummary?>((ref) {
   final activeYear = ref.watch(activeAcademicYearProvider).value;
   final activePeriod = ref.watch(activeDuesPeriodProvider).value;

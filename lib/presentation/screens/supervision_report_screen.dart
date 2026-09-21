@@ -1,15 +1,20 @@
+import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/database/app_database.dart';
-import '../../domain/services/csv_export_service.dart';
+import '../../domain/services/dues_arrears_service.dart';
+import '../../domain/services/excel_report_service.dart';
 import '../../domain/services/pdf_report_service.dart';
 import '../providers/app_providers.dart';
 import '../widgets/transaction_list_item.dart';
 import '../widgets/financial_chart_card.dart';
+import 'all_transactions_screen.dart';
 
 class SupervisionReportScreen extends ConsumerStatefulWidget {
   final VoidCallback? onBackToDashboard;
@@ -22,25 +27,57 @@ class SupervisionReportScreen extends ConsumerStatefulWidget {
 
 class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScreen> {
   bool _isGenerating = false;
+  int _visibleTxCount = 10;
 
   String _getRangeTitle(ReportDateRange range, AcademicYear? year) {
-    final now = DateTime.now();
+    final isCurrent = year == null || year.isActive;
+    final refDate = isCurrent ? DateTime.now() : year.endDate;
     const monthNames = [
       'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
       'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
     ];
-    final currentMonth = monthNames[now.month - 1];
-    final currentWeek = ((now.day - 1) ~/ 7) + 1;
+    final currentMonth = monthNames[refDate.month - 1];
+    final currentWeek = ((refDate.day - 1) ~/ 7) + 1;
 
     switch (range) {
       case ReportDateRange.oneMonth:
-        return 'Bulan $currentMonth ${now.year} (Minggu ke-$currentWeek)';
+        return isCurrent
+            ? 'Bulan $currentMonth ${refDate.year} (Minggu ke-$currentWeek)'
+            : 'Bulan $currentMonth ${refDate.year}';
       case ReportDateRange.threeMonths:
         return '3 Bulan (Triwulan)';
       case ReportDateRange.oneYear:
         return '1 Tahun Penuh';
       case ReportDateRange.allTime:
-        return 'Semua Rentang (Seluruh Arsip)';
+        return 'Semua Tahun (Seluruh Arsip)';
+    }
+  }
+
+  Future<List<StudentArrearsReportItem>> _loadStudentArrears(AcademicYear academicYear) async {
+    try {
+      final studentRepo = ref.read(studentRepoProvider);
+      final db = ref.read(databaseProvider);
+
+      final students = await studentRepo.getStudents(academicYear.id);
+      final periods = await (db.select(db.duesPeriods)
+            ..where((t) => t.academicYearId.equals(academicYear.id)))
+          .get();
+      final periodIds = periods.map((p) => p.id).toList();
+      final allPayments = periodIds.isEmpty
+          ? <DuesPayment>[]
+          : await (db.select(db.duesPayments)
+                ..where((t) => t.duesPeriodId.isIn(periodIds)))
+              .get();
+
+      const arrearsService = DuesArrearsService();
+      return arrearsService.calculateArrears(
+        students: students,
+        academicYear: academicYear,
+        duesPeriods: periods,
+        duesPayments: allPayments,
+      );
+    } catch (_) {
+      return [];
     }
   }
 
@@ -50,11 +87,13 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
       final range = ref.read(selectedReportRangeProvider);
       final txItems = ref.read(reportTransactionsProvider).value ?? [];
       final rangeTitle = _getRangeTitle(range, academicYear);
+      final studentArrears = await _loadStudentArrears(academicYear);
 
       final pdfBytes = await PdfReportService.generateReportPdf(
         academicYear: academicYear,
         periodRangeTitle: rangeTitle,
         items: txItems,
+        studentArrears: studentArrears,
       );
 
       final safeRange = rangeTitle.replaceAll(' ', '_').replaceAll('(', '').replaceAll(')', '');
@@ -77,11 +116,13 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
       final range = ref.read(selectedReportRangeProvider);
       final txItems = ref.read(reportTransactionsProvider).value ?? [];
       final rangeTitle = _getRangeTitle(range, academicYear);
+      final studentArrears = await _loadStudentArrears(academicYear);
 
       final pdfBytes = await PdfReportService.generateReportPdf(
         academicYear: academicYear,
         periodRangeTitle: rangeTitle,
         items: txItems,
+        studentArrears: studentArrears,
       );
 
       if (mounted) {
@@ -101,19 +142,83 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
     }
   }
 
-  Future<void> _exportCsv(AcademicYear academicYear) async {
+  Future<void> _exportExcel(AcademicYear academicYear) async {
+    setState(() => _isGenerating = true);
     try {
       final txItems = ref.read(reportTransactionsProvider).value ?? [];
-      final csvString = CsvExportService.generateCsv(academicYear: academicYear, items: txItems);
+      final studentRepo = ref.read(studentRepoProvider);
+      final db = ref.read(databaseProvider);
 
-      final filename = 'Laporan_Kas_${academicYear.name.replaceAll(' ', '_')}.csv';
-      await SharePlus.instance.share(ShareParams(text: csvString, subject: filename));
+      // Ambil daftar siswa kelas
+      final students = await studentRepo.getStudents(academicYear.id);
+
+      // Ambil seluruh periode kas kelas
+      final periods = await (db.select(db.duesPeriods)
+            ..where((t) => t.academicYearId.equals(academicYear.id)))
+          .get();
+
+      final periodIds = periods.map((p) => p.id).toList();
+      final allPayments = periodIds.isEmpty
+          ? <DuesPayment>[]
+          : await (db.select(db.duesPayments)
+                ..where((t) => t.duesPeriodId.isIn(periodIds)))
+              .get();
+
+      // Rekapitulasi pembayaran per siswa untuk Sheet 2
+      final List<StudentDuesReportSummary> studentSummaries = [];
+      for (final s in students) {
+        final studentPayments = allPayments.where((p) => p.studentId == s.id).toList();
+        var totalPaid = 0;
+        var paidPeriodsCount = 0;
+        for (final p in studentPayments) {
+          if (p.isPaid) {
+            paidPeriodsCount++;
+            totalPaid += p.amountPaid;
+          }
+        }
+        final isAllPaid = periods.isNotEmpty && paidPeriodsCount >= periods.length;
+        studentSummaries.add(
+          StudentDuesReportSummary(
+            attendanceNumber: s.attendanceNumber,
+            name: s.name,
+            totalPaid: totalPaid,
+            isAllPaid: isAllPaid,
+          ),
+        );
+      }
+
+      final excelBytes = ExcelReportService.generateExcel(
+        academicYear: academicYear,
+        items: txItems,
+        studentSummaries: studentSummaries,
+      );
+
+      final cleanName = academicYear.name.replaceAll(RegExp(r'[^\w\s]+'), '').replaceAll(' ', '_');
+      final filename = 'Laporan_Kas_$cleanName.xlsx';
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/$filename');
+      await file.writeAsBytes(excelBytes);
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile(
+              file.path,
+              mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              name: filename,
+            ),
+          ],
+          subject: filename,
+        ),
+      );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppColors.expenseText, content: Text('Galat ekspor CSV: $e')),
+          SnackBar(backgroundColor: AppColors.expenseText, content: Text('Galat ekspor Excel: $e')),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isGenerating = false);
     }
   }
 
@@ -241,7 +346,7 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Pusat Laporan Kas & Ekspor',
+                      'Pusat Laporan Kas dan Ekspor',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.w800,
@@ -250,64 +355,8 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Laporan pertanggungjawaban kas untuk ${displayYear.name} bagi orang tua murid dan sekolah.',
+                      'Laporan pertanggungjawaban kas untuk ${displayYear.name.toLowerCase().startsWith('kelas') ? displayYear.name : 'kelas ${displayYear.name}'}',
                       style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Kartu Profil Tim Pengawas & Siswa
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: AppColors.slateTag,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: const BoxDecoration(
-                              color: AppColors.blueLight,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.family_restroom_rounded, color: AppColors.brandPrimary, size: 20),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${displayYear.supervisorName} & ${displayYear.treasurerName}',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.circle, color: AppColors.incomeText, size: 8),
-                                    const SizedBox(width: 5),
-                                    Expanded(
-                                      child: Text(
-                                        'Sesi Rekonsiliasi Aktif • ${displayYear.name}',
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
                     ),
                   ],
                 ),
@@ -388,7 +437,7 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                     ),
                     const SizedBox(width: 8),
                     _buildRangeButton(
-                      label: 'Semua Rentang',
+                      label: 'Semua Tahun',
                       range: ReportDateRange.allTime,
                       selected: selectedRange,
                     ),
@@ -453,6 +502,7 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
               FinancialChartCard(
                 items: txItems,
                 selectedRange: selectedRange,
+                academicYear: displayYear,
               ),
               const SizedBox(height: 16),
 
@@ -485,7 +535,7 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                     child: OutlinedButton.icon(
                       icon: const Icon(Icons.table_chart_outlined, size: 18),
                       label: const Text('Ekspor Excel', style: TextStyle(fontSize: 13)),
-                      onPressed: _isGenerating ? null : () => _exportCsv(displayYear),
+                      onPressed: _isGenerating ? null : () => _exportExcel(displayYear),
                     ),
                   ),
                 ],
@@ -493,9 +543,79 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
               const SizedBox(height: 20),
 
               // 5. Daftar Transaksi pada Rentang Ini
-              Text(
-                'Arus Kas Tercatat (${txItems.length} Transaksi)',
-                style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+              // Banner Navigasi ke AllTransactionsScreen (R1)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                child: Material(
+                  color: AppColors.blueLight,
+                  borderRadius: BorderRadius.circular(10),
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AllTransactionsScreen(academicYear: displayYear),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.manage_search_rounded, color: AppColors.brandPrimary, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Lihat Semua Riwayat (${txItems.length} Transaksi) >',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: AppColors.brandPrimaryDark,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                const Text(
+                                  'Buka pencarian lengkap, filter kategori, dan rekap mutasi dinamis',
+                                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.chevron_right_rounded, color: AppColors.brandPrimary),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Arus Kas Tercatat (${txItems.length} Transaksi)',
+                    style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                  ),
+                  if (txItems.length > 10)
+                    Text(
+                      'Menampilkan ${min(_visibleTxCount, txItems.length)} dari ${txItems.length}',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                ],
               ),
               const SizedBox(height: 8),
 
@@ -513,8 +633,54 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                     style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
                   ),
                 )
-              else
-                ...txItems.map((item) => TransactionListItem(item: item)),
+              else ...[
+                ...txItems.take(_visibleTxCount).map((item) => TransactionListItem(key: ValueKey(item.transaction.id), item: item)),
+                if (txItems.length > 10) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      if (_visibleTxCount < txItems.length) ...[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.expand_more_rounded, size: 18),
+                            label: Text('Muat 10 Lagi (${txItems.length - _visibleTxCount} sisa)'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.brandPrimary,
+                              side: const BorderSide(color: AppColors.brandPrimary),
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _visibleTxCount = min(_visibleTxCount + 10, txItems.length);
+                              });
+                            },
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        OutlinedButton(
+                          onPressed: () {
+                            setState(() {
+                              _visibleTxCount = txItems.length;
+                            });
+                          },
+                          child: const Text('Semua'),
+                        ),
+                      ] else ...[
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            icon: const Icon(Icons.expand_less_rounded, size: 18),
+                            label: const Text('Ciutkan ke 10 Transaksi'),
+                            onPressed: () {
+                              setState(() {
+                                _visibleTxCount = 10;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ],
 
               const SizedBox(height: 32),
             ],
