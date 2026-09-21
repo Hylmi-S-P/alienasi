@@ -12,7 +12,7 @@ import 'package:bendahara_app/presentation/screens/dialogs/category_management_d
 import 'package:bendahara_app/presentation/screens/transaction_form_screen.dart';
 import 'package:bendahara_app/presentation/screens/dues_check_screen.dart';
 import 'package:bendahara_app/presentation/screens/supervision_report_screen.dart';
-import 'package:bendahara_app/presentation/screens/dialogs/advance_grade_dialog.dart';
+import 'package:bendahara_app/presentation/screens/dialogs/edit_student_dialog.dart';
 import 'package:bendahara_app/presentation/screens/dialogs/new_student_dialog.dart';
 import 'package:bendahara_app/presentation/widgets/financial_chart_card.dart';
 
@@ -83,7 +83,7 @@ void main() {
     // Verifikasi layar Laporan terbuka dan menampilkan FinancialChartCard
     expect(find.byType(FinancialChartCard), findsOneWidget);
     expect(find.text('Grafik Analisis Keuangan'), findsOneWidget);
-    expect(find.text('Pusat Laporan Kas & Ekspor'), findsOneWidget);
+    expect(find.text('Pusat Laporan Kas dan Ekspor'), findsOneWidget);
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pump(const Duration(milliseconds: 100));
@@ -329,7 +329,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
   });
 
-  testWidgets('Dialogs (ClassSetupDialog, AdvanceGradeDialog, NewStudentDialog) have close buttons and dismiss properly', (WidgetTester tester) async {
+  testWidgets('Dialogs (ClassSetupDialog, EditStudentDialog, NewStudentDialog) have close buttons and dismiss properly', (WidgetTester tester) async {
     final db = AppDatabase.forTesting(DatabaseConnection(NativeDatabase.memory()));
     addTearDown(() async => await db.close());
 
@@ -348,6 +348,15 @@ void main() {
       createdAt: now,
     );
 
+    final testStudent = Student(
+      id: 'student_test_1',
+      academicYearId: testYear.id,
+      attendanceNumber: 1,
+      name: 'Budi Santoso',
+      status: 'active',
+      createdAt: now,
+    );
+
     // 1. ClassSetupDialog close button
     await tester.pumpWidget(
       ProviderScope(
@@ -362,13 +371,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byTooltip('Tutup'), findsOneWidget);
 
-    // 2. AdvanceGradeDialog close button
+    // 2. EditStudentDialog close button
     await tester.pumpWidget(
       ProviderScope(
         overrides: [databaseProvider.overrideWithValue(db)],
         child: MaterialApp(
           home: Scaffold(
-            body: AdvanceGradeDialog(currentYear: testYear),
+            body: EditStudentDialog(student: testStudent, academicYearId: testYear.id),
           ),
         ),
       ),

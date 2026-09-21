@@ -343,7 +343,7 @@ void main() {
         categoryId: cat.id,
         type: 'income',
         amount: 150000,
-        title: 'Iuran Kas 2024',
+        title: 'Kas Siswa 2024',
         transactionDate: pastDate,
         createdAt: pastDate,
         updatedAt: pastDate,

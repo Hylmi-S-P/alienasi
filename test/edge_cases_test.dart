@@ -245,6 +245,10 @@ void main() {
 
   group('Edge Case 5: DuesCheckScreen UI Empty State & Disabled Reconcile', () {
     testWidgets('DuesCheckScreen menampilkan pesan ramah belum ada siswa dan tombol reconcile dinonaktifkan', (WidgetTester tester) async {
+      tester.view.physicalSize = const Size(800, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
       final db = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(() async => await db.close());
 
