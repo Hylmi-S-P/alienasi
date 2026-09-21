@@ -36,7 +36,7 @@ class TransactionRepository {
   }) {
     final query = (_db.select(_db.transactions)
           ..where((t) => t.academicYearId.equals(academicYearId))
-          ..orderBy([(t) => OrderingTerm(expression: t.transactionDate, mode: OrderingMode.desc)])
+          ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc)])
           ..limit(limit))
         .join([
       innerJoin(_db.categories, _db.categories.id.equalsExp(_db.transactions.categoryId)),
@@ -52,6 +52,55 @@ class TransactionRepository {
         );
       }).toList();
     });
+  }
+
+  Stream<List<TransactionWithCategory>> watchAllTransactions({
+    required String academicYearId,
+  }) {
+    final query = (_db.select(_db.transactions)
+          ..where((t) => t.academicYearId.equals(academicYearId))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.transactionDate, mode: OrderingMode.desc),
+            (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ]))
+        .join([
+      innerJoin(_db.categories, _db.categories.id.equalsExp(_db.transactions.categoryId)),
+      innerJoin(_db.academicYears, _db.academicYears.id.equalsExp(_db.transactions.academicYearId)),
+    ]);
+
+    return query.watch().map((rows) {
+      return rows.map((row) {
+        return TransactionWithCategory(
+          transaction: row.readTable(_db.transactions),
+          category: row.readTable(_db.categories),
+          academicYear: row.readTable(_db.academicYears),
+        );
+      }).toList();
+    });
+  }
+
+  Future<List<TransactionWithCategory>> getAllTransactions({
+    required String academicYearId,
+  }) async {
+    final query = (_db.select(_db.transactions)
+          ..where((t) => t.academicYearId.equals(academicYearId))
+          ..orderBy([
+            (t) => OrderingTerm(expression: t.transactionDate, mode: OrderingMode.desc),
+            (t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.desc),
+          ]))
+        .join([
+      innerJoin(_db.categories, _db.categories.id.equalsExp(_db.transactions.categoryId)),
+      innerJoin(_db.academicYears, _db.academicYears.id.equalsExp(_db.transactions.academicYearId)),
+    ]);
+
+    final rows = await query.get();
+    return rows.map((row) {
+      return TransactionWithCategory(
+        transaction: row.readTable(_db.transactions),
+        category: row.readTable(_db.categories),
+        academicYear: row.readTable(_db.academicYears),
+      );
+    }).toList();
   }
 
   Stream<List<TransactionWithCategory>> watchTransactionsByRange({
@@ -120,28 +169,33 @@ class TransactionRepository {
     final firstDayOfMonth = DateTime(now.year, now.month, 1);
     final lastDayOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
 
-    return (_db.select(_db.transactions)..where((t) => t.academicYearId.equals(academicYearId)))
-        .watch()
-        .map((allTransactions) {
+    final query = _db.selectOnly(_db.transactions)
+      ..addColumns([_db.transactions.type, _db.transactions.amount, _db.transactions.transactionDate])
+      ..where(_db.transactions.academicYearId.equals(academicYearId));
+
+    return query.watch().map((rows) {
       var totalBalance = 0;
       var monthlyIncome = 0;
       var monthlyExpense = 0;
 
-      for (final tx in allTransactions) {
-        if (tx.type == 'income') {
-          totalBalance += tx.amount;
+      for (final row in rows) {
+        final type = row.read(_db.transactions.type);
+        final amount = row.read(_db.transactions.amount) ?? 0;
+        final date = row.read(_db.transactions.transactionDate);
+
+        if (type == 'income') {
+          totalBalance += amount;
         } else {
-          totalBalance -= tx.amount;
+          totalBalance -= amount;
         }
 
-        final isThisMonth = tx.transactionDate.isAfter(firstDayOfMonth.subtract(const Duration(seconds: 1))) &&
-            tx.transactionDate.isBefore(lastDayOfMonth.add(const Duration(seconds: 1)));
-
-        if (isThisMonth) {
-          if (tx.type == 'income') {
-            monthlyIncome += tx.amount;
+        if (date != null &&
+            date.isAfter(firstDayOfMonth.subtract(const Duration(seconds: 1))) &&
+            date.isBefore(lastDayOfMonth.add(const Duration(seconds: 1)))) {
+          if (type == 'income') {
+            monthlyIncome += amount;
           } else {
-            monthlyExpense += tx.amount;
+            monthlyExpense += amount;
           }
         }
       }

@@ -1,5 +1,6 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
+import '../../core/utils/date_formatter.dart';
 import '../database/app_database.dart';
 
 class StudentDuesItem {
@@ -35,47 +36,132 @@ class DuesPeriodSummary {
 
 class DuesRepository {
   final AppDatabase _db;
-  const DuesRepository(this._db);
+  final Map<String, Future<DuesPeriod>> _activePeriodCreationLocks = {};
+
+  DuesRepository(this._db);
 
   Future<DuesPeriod> getOrCreateActivePeriod({
     required String academicYearId,
     required String periodLabel,
     required int targetAmount,
+    DateTime? dueDate,
   }) async {
-    final existing = await (_db.select(_db.duesPeriods)
-          ..where((t) => t.academicYearId.equals(academicYearId) & t.periodLabel.equals(periodLabel)))
-        .getSingleOrNull();
-
-    if (existing != null) {
-      return existing;
+    final lockKey = '$academicYearId::$periodLabel';
+    if (_activePeriodCreationLocks.containsKey(lockKey)) {
+      return _activePeriodCreationLocks[lockKey]!;
     }
 
-    const uuid = Uuid();
-    final newPeriod = DuesPeriodsCompanion.insert(
-      id: uuid.v4(),
+    final future = _getOrCreateActivePeriodInternal(
       academicYearId: academicYearId,
       periodLabel: periodLabel,
-      dueDate: DateTime.now(),
       targetAmount: targetAmount,
-      isReconciled: const Value(false),
-      createdAt: DateTime.now(),
+      dueDate: dueDate,
     );
 
-    await _db.into(_db.duesPeriods).insert(newPeriod);
-    return (_db.select(_db.duesPeriods)..where((t) => t.id.equals(newPeriod.id.value))).getSingle();
+    _activePeriodCreationLocks[lockKey] = future;
+    try {
+      return await future;
+    } finally {
+      _activePeriodCreationLocks.remove(lockKey);
+    }
+  }
+
+  Future<DuesPeriod> _getOrCreateActivePeriodInternal({
+    required String academicYearId,
+    required String periodLabel,
+    required int targetAmount,
+    DateTime? dueDate,
+  }) async {
+    var period = await (_db.select(_db.duesPeriods)
+          ..where((t) => t.academicYearId.equals(academicYearId) & t.periodLabel.equals(periodLabel))
+          ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc)])
+          ..limit(1))
+        .getSingleOrNull();
+
+    final effectiveDueDate = dueDate ??
+        DateFormatter.tryParsePeriodDate(periodLabel) ??
+        DateTime.now();
+
+    if (period == null) {
+      const uuid = Uuid();
+      final newPeriodId = uuid.v4();
+      final newPeriod = DuesPeriodsCompanion.insert(
+        id: newPeriodId,
+        academicYearId: academicYearId,
+        periodLabel: periodLabel,
+        dueDate: effectiveDueDate,
+        targetAmount: targetAmount,
+        isReconciled: const Value(false),
+        createdAt: DateTime.now(),
+      );
+
+      await _db.into(_db.duesPeriods).insert(newPeriod, mode: InsertMode.insertOrIgnore);
+      period = await (_db.select(_db.duesPeriods)
+            ..where((t) => t.academicYearId.equals(academicYearId) & t.periodLabel.equals(periodLabel))
+            ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc)])
+            ..limit(1))
+          .getSingle();
+    } else {
+      final parsedDate = DateFormatter.tryParsePeriodDate(period.periodLabel);
+      if (parsedDate != null &&
+          (period.dueDate.year != parsedDate.year ||
+              period.dueDate.month != parsedDate.month ||
+              period.dueDate.day != parsedDate.day)) {
+        await (_db.update(_db.duesPeriods)..where((t) => t.id.equals(period!.id))).write(
+          DuesPeriodsCompanion(
+            dueDate: Value(parsedDate),
+          ),
+        );
+        period = await (_db.select(_db.duesPeriods)
+              ..where((t) => t.id.equals(period!.id)))
+            .getSingle();
+      }
+    }
+
+    // Pastikan seluruh siswa aktif memiliki entri awal di dues_payments untuk periode ini (self-healing batch)
+    final students = await (_db.select(_db.students)
+          ..where((t) => t.academicYearId.equals(academicYearId)))
+        .get();
+
+    final periodId = period.id;
+    if (students.isNotEmpty) {
+      await _db.batch((batch) {
+        for (final s in students) {
+          batch.insert(
+            _db.duesPayments,
+            DuesPaymentsCompanion.insert(
+              id: const Uuid().v4(),
+              duesPeriodId: periodId,
+              studentId: s.id,
+              amountPaid: const Value(0),
+              isPaid: const Value(false),
+              paidAt: const Value(null),
+            ),
+            mode: InsertMode.insertOrIgnore,
+          );
+        }
+      });
+    }
+
+    return period;
   }
 
   Stream<DuesPeriod?> watchActivePeriod({
     required String academicYearId,
     required String periodLabel,
     required int targetAmount,
+    DateTime? dueDate,
   }) async* {
     final period = await getOrCreateActivePeriod(
       academicYearId: academicYearId,
       periodLabel: periodLabel,
       targetAmount: targetAmount,
+      dueDate: dueDate,
     );
-    yield* (_db.select(_db.duesPeriods)..where((t) => t.id.equals(period.id))).watchSingleOrNull();
+    yield* (_db.select(_db.duesPeriods)
+          ..where((t) => t.id.equals(period.id))
+          ..limit(1))
+        .watchSingleOrNull();
   }
 
   Stream<List<DuesPeriod>> watchPeriods(String academicYearId) {
@@ -101,12 +187,20 @@ class DuesRepository {
     ]);
 
     return studentsQuery.watch().map((rows) {
-      return rows.map((row) {
-        return StudentDuesItem(
-          student: row.readTable(_db.students),
-          payment: row.readTableOrNull(_db.duesPayments),
-        );
-      }).toList();
+      final items = <StudentDuesItem>[];
+      for (final row in rows) {
+        final student = row.readTable(_db.students);
+        final payment = row.readTableOrNull(_db.duesPayments);
+        // Siswa non-aktif hanya diikutsertakan jika memiliki riwayat bayar lunas pada periode ini
+        if (student.status != 'active' && (payment == null || !payment.isPaid)) {
+          continue;
+        }
+        items.add(StudentDuesItem(
+          student: student,
+          payment: payment,
+        ));
+      }
+      return items;
     });
   }
 
@@ -175,6 +269,63 @@ class DuesRepository {
     }
   }
 
+  Future<void> markAsPaid({
+    required String duesPeriodId,
+    required String studentId,
+    required int targetAmount,
+  }) async {
+    final existingPayment = await (_db.select(_db.duesPayments)
+          ..where((t) => t.duesPeriodId.equals(duesPeriodId) & t.studentId.equals(studentId)))
+        .getSingleOrNull();
+
+    if (existingPayment != null && existingPayment.isPaid) {
+      return;
+    }
+
+    final now = DateTime.now();
+    if (existingPayment == null) {
+      await _db.into(_db.duesPayments).insert(
+        DuesPaymentsCompanion.insert(
+          id: const Uuid().v4(),
+          duesPeriodId: duesPeriodId,
+          studentId: studentId,
+          amountPaid: Value(targetAmount),
+          isPaid: const Value(true),
+          paidAt: Value(now),
+        ),
+        mode: InsertMode.insertOrReplace,
+      );
+    } else {
+      await (_db.update(_db.duesPayments)..where((t) => t.id.equals(existingPayment.id))).write(
+        DuesPaymentsCompanion(
+          amountPaid: Value(targetAmount),
+          isPaid: const Value(true),
+          paidAt: Value(now),
+        ),
+      );
+    }
+  }
+
+  Future<void> markBatchAsPaid({
+    required String duesPeriodId,
+    required Iterable<String> studentIds,
+    required int targetAmount,
+  }) async {
+    if (studentIds.isEmpty) return;
+    final now = DateTime.now();
+    await _db.transaction(() async {
+      await (_db.update(_db.duesPayments)
+            ..where((t) => t.duesPeriodId.equals(duesPeriodId) & t.studentId.isIn(studentIds)))
+          .write(
+        DuesPaymentsCompanion(
+          amountPaid: Value(targetAmount),
+          isPaid: const Value(true),
+          paidAt: Value(now),
+        ),
+      );
+    });
+  }
+
   Future<int> reconcileIntoGeneralCash({
     required DuesPeriod period,
     required String academicYearId,
@@ -204,7 +355,17 @@ class DuesRepository {
     }
 
     final delta = totalCollected - previouslyReconciled;
-    if (delta <= 0) return 0;
+    if (delta <= 0) {
+      if (currentPeriod.reconciledAmount != previouslyReconciled) {
+        await (_db.update(_db.duesPeriods)..where((t) => t.id.equals(period.id)))
+            .write(
+          DuesPeriodsCompanion(
+            reconciledAmount: Value(previouslyReconciled),
+          ),
+        );
+      }
+      return 0;
+    }
 
     // 3. Cari kategori "Uang Kas Rutin"
     final incomeCategory = await (_db.select(_db.categories)
@@ -216,8 +377,22 @@ class DuesRepository {
     const uuid = Uuid();
     final txId = uuid.v4();
     final now = DateTime.now();
+    final effectivePeriodDate = DateFormatter.tryParsePeriodDate(
+          currentPeriod.periodLabel,
+          fallbackDueDate: currentPeriod.dueDate,
+        ) ??
+        currentPeriod.dueDate;
 
-    final isFirstReconcile = previouslyReconciled == 0;
+    final txDate = DateTime(
+      effectivePeriodDate.year,
+      effectivePeriodDate.month,
+      effectivePeriodDate.day,
+      now.hour,
+      now.minute,
+      now.second,
+    );
+
+    final isFirstReconcile = previouslyReconciled == 0 && !currentPeriod.isReconciled;
     final deltaStudentCount = currentPeriod.targetAmount > 0
         ? (delta ~/ currentPeriod.targetAmount)
         : payments.length;
@@ -236,7 +411,7 @@ class DuesRepository {
         description: Value(isFirstReconcile
             ? 'Penerimaan kas dari ${payments.length} siswa lunas'
             : 'Penerimaan kas tambahan ($deltaStudentCount siswa baru lunas)'),
-        transactionDate: now,
+        transactionDate: txDate,
         createdAt: now,
         updatedAt: now,
       ),
@@ -253,5 +428,17 @@ class DuesRepository {
     );
 
     return delta;
+  }
+
+  Future<void> syncReconciledAmount({
+    required String duesPeriodId,
+    required int actualCollected,
+  }) async {
+    await (_db.update(_db.duesPeriods)..where((t) => t.id.equals(duesPeriodId)))
+        .write(
+      DuesPeriodsCompanion(
+        reconciledAmount: Value(actualCollected),
+      ),
+    );
   }
 }

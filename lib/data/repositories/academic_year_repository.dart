@@ -98,6 +98,8 @@ class AcademicYearRepository {
     required String supervisorName,
     required int defaultDuesAmount,
     String? duesPeriodType,
+    DateTime? startDate,
+    DateTime? endDate,
   }) async {
     await (_db.update(_db.academicYears)..where((t) => t.id.equals(id))).write(
       AcademicYearsCompanion(
@@ -107,6 +109,8 @@ class AcademicYearRepository {
         supervisorName: Value(supervisorName),
         defaultDuesAmount: Value(defaultDuesAmount),
         duesPeriodType: duesPeriodType != null ? Value(duesPeriodType) : const Value.absent(),
+        startDate: startDate != null ? Value(startDate) : const Value.absent(),
+        endDate: endDate != null ? Value(endDate) : const Value.absent(),
       ),
     );
   }
