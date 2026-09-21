@@ -80,7 +80,14 @@ class TransactionListItem extends StatelessWidget {
                       const SizedBox(height: 3),
                       Builder(
                         builder: (context) {
-                          final isBackdated = !DateUtils.isSameDay(tx.transactionDate, tx.createdAt);
+                          final txDay = DateUtils.dateOnly(tx.transactionDate);
+                          final createdDay = DateUtils.dateOnly(tx.createdAt);
+                          final dateOffset = DateUtils.isSameDay(txDay, createdDay)
+                              ? 0
+                              : txDay.difference(createdDay).inDays;
+                          final isBackdated = dateOffset < 0;
+                          final badgeText = isBackdated ? 'Mundur' : 'Maju';
+                          final isDateOffset = dateOffset != 0;
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             mainAxisSize: MainAxisSize.min,
@@ -89,7 +96,7 @@ class TransactionListItem extends StatelessWidget {
                                 children: [
                                   Flexible(
                                     child: Text(
-                                      isBackdated
+                                      isDateOffset
                                           ? 'Tanggal: ${DateFormatter.toHumanDate(tx.transactionDate)} • Dicatat: ${DateFormatter.toHumanDate(tx.createdAt)}'
                                           : DateFormatter.toHumanDate(tx.transactionDate),
                                       style: const TextStyle(
@@ -100,7 +107,7 @@ class TransactionListItem extends StatelessWidget {
                                       overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
-                                  if (!isBackdated) ...[
+                                  if (!isDateOffset) ...[
                                     const SizedBox(width: 4),
                                     const Text(
                                       '•',
@@ -124,14 +131,14 @@ class TransactionListItem extends StatelessWidget {
                                   ],
                                 ],
                               ),
-                              if (isBackdated || tx.receiptImagePath != null) ...[
+                              if (isDateOffset || tx.receiptImagePath != null) ...[
                                 const SizedBox(height: 2),
                                 Wrap(
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   spacing: 6,
                                   runSpacing: 2,
                                   children: [
-                                    if (isBackdated)
+                                    if (isDateOffset)
                                       Text(
                                         item.category.name,
                                         style: const TextStyle(
@@ -139,21 +146,21 @@ class TransactionListItem extends StatelessWidget {
                                           color: AppColors.textSecondary,
                                         ),
                                       ),
-                                    if (isBackdated)
+                                    if (isDateOffset)
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                                         decoration: BoxDecoration(
-                                          color: AppColors.warningBg,
+                                          color: isBackdated ? AppColors.warningBg : AppColors.blueLight,
                                           borderRadius: BorderRadius.circular(4),
                                         ),
-                                        child: const FittedBox(
+                                        child: FittedBox(
                                           fit: BoxFit.scaleDown,
                                           child: Text(
-                                            'Mundur',
+                                            badgeText,
                                             style: TextStyle(
                                               fontSize: 9.5,
                                               fontWeight: FontWeight.w600,
-                                              color: AppColors.warningText,
+                                              color: isBackdated ? AppColors.warningText : AppColors.brandPrimary,
                                             ),
                                           ),
                                         ),
@@ -232,7 +239,13 @@ class _TransactionDetailDialog extends StatelessWidget {
     final tx = item.transaction;
     final isIncome = tx.type == 'income';
     final amountColor = isIncome ? AppColors.incomeText : AppColors.expenseText;
-    final isBackdated = !DateUtils.isSameDay(tx.transactionDate, tx.createdAt);
+    final txDay = DateUtils.dateOnly(tx.transactionDate);
+    final createdDay = DateUtils.dateOnly(tx.createdAt);
+    final dateOffset = DateUtils.isSameDay(txDay, createdDay)
+        ? 0
+        : txDay.difference(createdDay).inDays;
+    final isDateOffset = dateOffset != 0;
+    final isBackdated = dateOffset < 0;
     final hasReceipt = tx.receiptImagePath != null && tx.receiptImagePath!.isNotEmpty;
     final receiptFile = hasReceipt ? File(tx.receiptImagePath!) : null;
     final fileExists = receiptFile != null && receiptFile.existsSync();
@@ -311,7 +324,7 @@ class _TransactionDetailDialog extends StatelessWidget {
               const SizedBox(height: 10),
 
               // Metadata: Tanggal & Kategori
-              if (isBackdated) ...[
+              if (isDateOffset) ...[
                 _buildDetailRow(
                   icon: Icons.calendar_today_rounded,
                   label: 'Tanggal Transaksi',
@@ -333,15 +346,21 @@ class _TransactionDetailDialog extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.history_rounded, size: 14, color: AppColors.warningText),
+                      Icon(
+                        isBackdated ? Icons.history_rounded : Icons.upcoming_rounded,
+                        size: 14,
+                        color: AppColors.warningText,
+                      ),
                       const SizedBox(width: 6),
                       Flexible(
                         child: FittedBox(
                           fit: BoxFit.scaleDown,
                           alignment: Alignment.centerLeft,
-                          child: const Text(
-                            'Pencatatan Kas Mundur (Backdated)',
-                            style: TextStyle(
+                          child: Text(
+                            isBackdated
+                                ? 'Pencatatan Kas Mundur (Backdated)'
+                                : 'Pencatatan Kas Terjadwal Maju (Future-Dated)',
+                            style: const TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
                               color: AppColors.warningText,

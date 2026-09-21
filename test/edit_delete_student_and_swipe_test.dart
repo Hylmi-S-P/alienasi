@@ -5,6 +5,7 @@ import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
+import 'package:bendahara_app/core/constants/app_colors.dart';
 import 'package:bendahara_app/data/database/app_database.dart';
 import 'package:bendahara_app/data/repositories/academic_year_repository.dart';
 import 'package:bendahara_app/data/repositories/dues_repository.dart';
@@ -276,8 +277,13 @@ void main() {
       expect(find.byType(PageView), findsOneWidget);
       expect(find.text('Kas Siswa'), findsWidgets);
 
-      // Tap 'Kas Siswa' item on BottomNavigationBar
-      await tester.tap(find.byIcon(Icons.fact_check_rounded));
+      // Tap 'Kas Siswa' tab inside NavigationBar (unselected tabs use outlined icons)
+      await tester.tap(
+        find.byWidgetPredicate((w) =>
+            w is Icon &&
+            w.icon == Icons.fact_check_outlined &&
+            w.color == AppColors.textSecondary),
+      );
       await tester.pumpAndSettle();
 
       // Verify Kas Siswa appbar is visible

@@ -597,7 +597,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(tester.takeException(), isNull);
-      expect(find.text('Mundur'), findsOneWidget);
+      expect(find.text('Maju'), findsOneWidget);
+      expect(find.text('Mundur'), findsNothing);
       expect(find.textContaining('Tanggal: 25 Desember 2026 • Dicatat: 20 September 2026'), findsOneWidget);
 
       // Open Dialog
@@ -606,7 +607,7 @@ void main() {
 
       expect(find.text('Tanggal Transaksi: '), findsOneWidget);
       expect(find.text('Waktu Pencatatan: '), findsOneWidget);
-      expect(find.text('Pencatatan Kas Mundur (Backdated)'), findsOneWidget);
+      expect(find.text('Pencatatan Kas Terjadwal Maju (Future-Dated)'), findsOneWidget);
 
       await tester.tap(find.text('Tutup'));
       await tester.pumpAndSettle();

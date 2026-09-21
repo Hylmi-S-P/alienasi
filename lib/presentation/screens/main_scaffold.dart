@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/constants/app_colors.dart';
 import 'dashboard_screen.dart';
 import 'dues_check_screen.dart';
 import 'transaction_form_screen.dart';
@@ -65,24 +66,34 @@ class _MainScaffoldState extends State<MainScaffold> {
           },
           children: screens,
         ),
-        bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _currentIndex,
-          onTap: (index) => _navigateToTab(index),
-          items: const [
-            BottomNavigationBarItem(
-              icon: Icon(Icons.dashboard_rounded),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _currentIndex,
+          onDestinationSelected: (index) => _navigateToTab(index),
+          height: 68,
+          backgroundColor: Colors.white,
+          indicatorColor: AppColors.brandPrimaryLight,
+          surfaceTintColor: Colors.transparent,
+          elevation: 8,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined, color: AppColors.textSecondary),
+              selectedIcon: Icon(Icons.dashboard_rounded, color: AppColors.brandPrimary),
               label: 'Dashboard',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.fact_check_rounded),
+            NavigationDestination(
+              icon: Icon(Icons.fact_check_outlined, color: AppColors.textSecondary),
+              selectedIcon: Icon(Icons.fact_check_rounded, color: AppColors.brandPrimary),
               label: 'Kas Siswa',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.edit_note_rounded),
+            NavigationDestination(
+              icon: Icon(Icons.edit_note_outlined, color: AppColors.textSecondary),
+              selectedIcon: Icon(Icons.edit_note_rounded, color: AppColors.brandPrimary),
               label: 'Catat Transaksi',
             ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.bar_chart_rounded),
+            NavigationDestination(
+              icon: Icon(Icons.bar_chart_outlined, color: AppColors.textSecondary),
+              selectedIcon: Icon(Icons.bar_chart_rounded, color: AppColors.brandPrimary),
               label: 'Laporan',
             ),
           ],
