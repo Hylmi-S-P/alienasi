@@ -1,4 +1,4 @@
-import 'dart:io';
+﻿import 'dart:io';
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
@@ -6,8 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
-import 'package:printing/printing.dart';
 import 'package:bendahara_app/data/database/app_database.dart';
+import 'package:bendahara_app/domain/services/pdf_report_service.dart';
 import 'package:bendahara_app/presentation/providers/app_providers.dart';
 import 'package:bendahara_app/presentation/screens/dialogs/end_term_dialog.dart';
 
@@ -22,9 +22,9 @@ void main() {
       return Directory.systemTemp.path;
     });
 
-    await PdfGoogleFonts.plusJakartaSansRegular();
-    await PdfGoogleFonts.plusJakartaSansBold();
-    await PdfGoogleFonts.plusJakartaSansSemiBold();
+    // Panaskan cache font aset (bukan unduhan jaringan) agar dialog dapat
+    // merender laporan PDF tanpa koneksi internet.
+    await PdfReportService.loadReportFonts();
   });
 
   late AppDatabase db;

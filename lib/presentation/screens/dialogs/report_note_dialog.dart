@@ -145,14 +145,15 @@ class _ReportNoteDialogState extends State<ReportNoteDialog> {
                       minimumSize: const Size.fromHeight(44),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                     ),
-                    onPressed: noteText.isEmpty
-                        ? null
-                        : () => Navigator.of(context).pop(noteText),
-                    child: const FittedBox(
+                    // Tombol utama SELALU aktif. Sebelumnya tombol ini mati
+                    // saat catatan kosong sehingga pengguna yang tidak ingin
+                    // menulis catatan merasa ekspor tidak bisa dilanjutkan.
+                    onPressed: () => Navigator.of(context).pop(noteText),
+                    child: FittedBox(
                       fit: BoxFit.scaleDown,
                       child: Text(
-                        'Sertakan Catatan',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                        noteText.isEmpty ? 'Lanjutkan Ekspor' : 'Sertakan Catatan',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
                       ),
                     ),
                   ),

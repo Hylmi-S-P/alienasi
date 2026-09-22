@@ -1,9 +1,8 @@
-import 'dart:typed_data';
+﻿import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:bendahara_app/core/utils/currency_formatter.dart';
 import 'package:bendahara_app/data/database/app_database.dart';
 import 'package:bendahara_app/data/repositories/transaction_repository.dart';
@@ -25,9 +24,10 @@ void main() {
     late pw.Font fontSemiBold;
 
     setUpAll(() async {
-      fontRegular = await PdfGoogleFonts.plusJakartaSansRegular();
-      fontBold = await PdfGoogleFonts.plusJakartaSansBold();
-      fontSemiBold = await PdfGoogleFonts.plusJakartaSansSemiBold();
+      final fonts = await PdfReportService.loadReportFonts();
+      fontRegular = fonts.regular;
+      fontBold = fonts.bold;
+      fontSemiBold = fonts.semiBold;
     });
 
     setUp(() {

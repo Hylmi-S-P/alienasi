@@ -2,8 +2,8 @@
 
 > **Dokumen Catatan Konteks Menyeluruh (*Complete Context Dump & Knowledge Base*)**  
 > **Aplikasi**: Bendahara Kelas (Flutter Mobile - Android)  
-> **Terakhir Diperbarui**: 22 September 2026 (v1.1.2+11)  
-> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.1.2 Build 11)  
+> **Terakhir Diperbarui**: 22 September 2026 (v1.1.3+12)  
+> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.1.3 Build 12)  
 > **Lokasi Berkas**: `docs/CONTEXT_DUMP.md`
 
 ---
@@ -458,6 +458,13 @@ Berkas APK Release final telah dikompilasi dengan konfigurasi *release optimizat
 ---
 
 ## 7. Saran & Rekomendasi Pengembangan Masa Depan (Suggestions & Roadmap)
+
+### Rilis v1.1.3+12: Perbaikan Total Fitur Ekspor (Bug Offline)
+- **AKAR MASALAH**: `PdfReportService` memakai `PdfGoogleFonts.plusJakartaSans*()` yang mengunduh berkas font dari `https://fonts.gstatic.com` setiap kali laporan dibuat. Aplikasi ini offline-first, sehingga pada perangkat tanpa koneksi seluruh ekspor PDF gagal dengan galat. Bug ini tidak pernah tertangkap test otomatis karena mesin test/CI memiliki jaringan.
+- **SOLUSI**: Font Plus Jakarta Sans (regular, semi-bold, bold) kini dibundle di dalam APK pada `assets/fonts/` dan dimuat via `rootBundle`. Tersedia API `PdfReportService.loadReportFonts()` dengan fallback ke font bawaan PDF (Helvetica) bila aset bermasalah, sehingga ekspor tidak pernah mati total.
+- **Perbaikan dialog catatan**: Tombol utama `ReportNoteDialog` sebelumnya NONAKTIF saat kolom catatan kosong, sehingga pengguna yang tidak ingin menulis catatan merasa ekspor tidak bisa dilanjutkan. Kini tombol selalu aktif dengan label dinamis (`Lanjutkan Ekspor` saat kosong, `Sertakan Catatan` saat terisi).
+- **Jalur berbagi ganda**: `Printing.sharePdf` kini memiliki fallback otomatis ke `SharePlus` (tulis berkas PDF lalu share sheet sistem) bila plugin printing gagal di perangkat tertentu.
+- **Test bebas jaringan**: Seluruh test yang memuat font kini memakai `PdfReportService.loadReportFonts()` dari aset, bukan unduhan. Ditambah `test/unit/offline_export_test.dart` yang memverifikasi aset font terdaftar di AssetManifest, dapat dimuat, dan menghasilkan PDF valid dari aset lokal.
 
 ### Rilis v1.1.2+11: Kemudahan Pemilihan Rentang Kustom
 - **Pemilih rentang satu kalender** — Mengganti dua dialog `showDatePicker` terpisah dengan `showDateRangePicker` bawaan Material: pengguna mengetuk tanggal awal lalu tanggal akhir dalam satu kalender, dan seluruh tanggal di antara keduanya otomatis ter-highlight hijau sehingga rentang terlihat jelas.

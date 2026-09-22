@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:bendahara_app/domain/services/pdf_report_service.dart';
 import 'package:bendahara_app/presentation/screens/dialogs/report_note_dialog.dart';
 
@@ -17,8 +16,10 @@ void main() {
     late pw.Font fontBold;
 
     setUpAll(() async {
-      fontRegular = await PdfGoogleFonts.plusJakartaSansRegular();
-      fontBold = await PdfGoogleFonts.plusJakartaSansBold();
+      // Font dari aset aplikasi agar test tidak bergantung jaringan.
+      final fonts = await PdfReportService.loadReportFonts();
+      fontRegular = fonts.regular;
+      fontBold = fonts.bold;
     });
 
     test('buildNoteSection returns widget list with header, note text and signature block', () {
@@ -88,17 +89,30 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('menampilkan judul, hint, tombol Lewati dan Sertakan Catatan', (tester) async {
+    testWidgets('menampilkan judul, hint, tombol Lewati dan tombol lanjut yang selalu aktif', (tester) async {
       await pumpDialog(tester);
 
       expect(find.text('Catatan Bendahara'), findsOneWidget);
       expect(find.text('Lewati'), findsOneWidget);
-      expect(find.text('Sertakan Catatan'), findsOneWidget);
-      // Tombol kirim dinonaktifkan saat catatan kosong
+
+      // Catatan bersifat opsional, maka tombol utama TIDAK boleh mati saat
+      // kolom kosong. Sebelumnya tombol ini disabled dan membuat pengguna
+      // mengira laporan tidak bisa diekspor sama sekali.
+      expect(find.text('Lanjutkan Ekspor'), findsOneWidget);
       final submitButton = tester.widget<ElevatedButton>(
-        find.ancestor(of: find.text('Sertakan Catatan'), matching: find.byType(ElevatedButton)),
+        find.ancestor(of: find.text('Lanjutkan Ekspor'), matching: find.byType(ElevatedButton)),
       );
-      expect(submitButton.onPressed, isNull);
+      expect(submitButton.onPressed, isNotNull);
+    });
+
+    testWidgets('tombol utama berubah menjadi Sertakan Catatan saat catatan diisi', (tester) async {
+      await pumpDialog(tester);
+
+      await tester.enterText(find.byType(TextField), 'Sisa kas dititipkan.');
+      await tester.pump();
+
+      expect(find.text('Sertakan Catatan'), findsOneWidget);
+      expect(find.text('Lanjutkan Ekspor'), findsNothing);
     });
 
     testWidgets('mengetik catatan lalu konfirmasi mengembalikan teks catatan', (tester) async {

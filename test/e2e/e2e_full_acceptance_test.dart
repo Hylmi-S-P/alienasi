@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
@@ -6,7 +6,6 @@ import 'package:drift/native.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:bendahara_app/core/constants/app_colors.dart';
@@ -47,9 +46,10 @@ void main() {
     late pw.Font fontSemiBold;
 
     setUpAll(() async {
-      fontRegular = await PdfGoogleFonts.plusJakartaSansRegular();
-      fontBold = await PdfGoogleFonts.plusJakartaSansBold();
-      fontSemiBold = await PdfGoogleFonts.plusJakartaSansSemiBold();
+      final fonts = await PdfReportService.loadReportFonts();
+      fontRegular = fonts.regular;
+      fontBold = fonts.bold;
+      fontSemiBold = fonts.semiBold;
     });
 
     setUp(() async {

@@ -166,7 +166,25 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
 
       final safeRange = rangeTitle.replaceAll(' ', '_').replaceAll('(', '').replaceAll(')', '');
       final filename = 'Laporan_Kas_${academicYear.name.replaceAll(' ', '_')}_$safeRange.pdf';
-      await Printing.sharePdf(bytes: pdfBytes, filename: filename);
+
+      // Jalur berbagi utama memakai plugin printing. Jika gagal di perangkat
+      // tertentu, jatuh ke jalur kedua: tulis berkas PDF lalu bagikan dengan
+      // share sheet sistem supaya tombol ekspor tidak pernah buntu.
+      try {
+        await Printing.sharePdf(bytes: pdfBytes, filename: filename);
+      } catch (_) {
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/$filename');
+        await file.writeAsBytes(pdfBytes, flush: true);
+        await SharePlus.instance.share(
+          ShareParams(
+            files: [
+              XFile(file.path, mimeType: 'application/pdf', name: filename),
+            ],
+            subject: filename,
+          ),
+        );
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

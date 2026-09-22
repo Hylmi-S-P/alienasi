@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../data/database/app_database.dart';
@@ -611,6 +611,38 @@ class PdfReportService {
     ];
   }
 
+  /// Memuat trio font laporan (regular, bold, semi-bold) dari aset aplikasi.
+  ///
+  /// Font dibundle di dalam APK sehingga generator laporan bekerja 100%
+  /// offline. Sebelumnya pemuatan font memakai `PdfGoogleFonts` yang
+  /// mengunduh berkas dari fonts.gstatic.com, sehingga ekspor PDF gagal
+  /// total pada perangkat tanpa koneksi internet.
+  /// Jika aset tidak dapat dimuat karena sebab apa pun, kembalian jatuh ke
+  /// font bawaan PDF (Helvetica) agar fitur ekspor tidak pernah mati total.
+  static Future<({pw.Font regular, pw.Font bold, pw.Font semiBold})> loadReportFonts() async {
+    try {
+      return (
+        regular: pw.Font.ttf(
+          await rootBundle.load('assets/fonts/PlusJakartaSans-Regular.ttf'),
+        ),
+        bold: pw.Font.ttf(
+          await rootBundle.load('assets/fonts/PlusJakartaSans-Bold.ttf'),
+        ),
+        semiBold: pw.Font.ttf(
+          await rootBundle.load('assets/fonts/PlusJakartaSans-SemiBold.ttf'),
+        ),
+      );
+    } catch (_) {
+      final fallbackRegular = pw.Font.helvetica();
+      final fallbackBold = pw.Font.helveticaBold();
+      return (
+        regular: fallbackRegular,
+        bold: fallbackBold,
+        semiBold: fallbackBold,
+      );
+    }
+  }
+
   static Future<Uint8List> generateReportPdf({
     required AcademicYear academicYear,
     required String periodRangeTitle, // misal: "1 Bulan (1 Sep 2026 s/d 30 Sep 2026)"
@@ -652,10 +684,11 @@ class PdfReportService {
     }
     final finalBalance = totalIncome - totalExpense;
 
-    // Load font
-    final fontRegular = await PdfGoogleFonts.plusJakartaSansRegular();
-    final fontBold = await PdfGoogleFonts.plusJakartaSansBold();
-    final fontSemiBold = await PdfGoogleFonts.plusJakartaSansSemiBold();
+    // Muat font dari aset aplikasi (Plus Jakarta Sans) yang dibundle di APK.
+    final fonts = await loadReportFonts();
+    final fontRegular = fonts.regular;
+    final fontBold = fonts.bold;
+    final fontSemiBold = fonts.semiBold;
 
     pdf.addPage(
       pw.MultiPage(
