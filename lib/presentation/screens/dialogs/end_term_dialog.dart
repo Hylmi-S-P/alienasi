@@ -1,8 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/constants/app_colors.dart';
@@ -22,11 +24,11 @@ class EndTermDialog extends ConsumerStatefulWidget {
 
   const EndTermDialog({super.key, required this.academicYear});
 
-  static Future<void> show(
+  static Future<bool?> show(
     BuildContext context, {
     required AcademicYear academicYear,
   }) {
-    return showDialog(
+    return showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => EndTermDialog(academicYear: academicYear),
@@ -42,11 +44,15 @@ enum _TermStep { intro, working, pdfShare, jsonShare, confirmWipe, done }
 class _EndTermDialogState extends ConsumerState<EndTermDialog> {
   _TermStep _step = _TermStep.intro;
   String? _error;
+  String _workingMessage = 'Menyiapkan berkas pengamanan data...';
 
   // Jalur file sementara yang telah dibuat
   File? _pdfFile;
+  Uint8List? _pdfBytes;
   File? _jsonFile;
   String _jsonFilename = '';
+  bool _isPdfShared = false;
+  bool _isJsonShared = false;
 
   // Statistik untuk ditampilkan
   int _txCount = 0;
@@ -92,6 +98,16 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
   }
 
   Future<void> _startBackup() async {
+    final note = await ReportNoteDialog.show(
+      context,
+      rangeTitle: 'Laporan Akhir Jabatan (Seluruh Periode)',
+    );
+    if (!mounted) return;
+    if (note == null) {
+      // Pengguna membatalkan pengisian catatan: tetap di tampilan awal.
+      return;
+    }
+
     setState(() {
       _step = _TermStep.working;
       _error = null;
@@ -123,14 +139,6 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
         duesPayments: allPayments,
       );
 
-      if (!mounted) return;
-      final note = await ReportNoteDialog.show(
-        context,
-        rangeTitle: 'Laporan Akhir Jabatan (Seluruh Periode)',
-      );
-      if (!mounted) return;
-      if (note == null) return; // batal seluruh proses
-
       final pdfBytes = await PdfReportService.generateReportPdf(
         academicYear: widget.academicYear,
         periodRangeTitle: 'Laporan Akhir - Seluruh Periode Jabatan',
@@ -148,7 +156,9 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
 
       if (!mounted) return;
       setState(() {
+        _pdfBytes = pdfBytes;
         _pdfFile = pdfFile;
+        _isPdfShared = false;
         _step = _TermStep.pdfShare;
       });
     } catch (e) {
@@ -157,6 +167,25 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
           _step = _TermStep.intro;
           _error = 'Gagal membuat PDF laporan: $e';
         });
+      }
+    }
+  }
+
+  Future<void> _previewPdf() async {
+    if (_pdfBytes == null) return;
+    try {
+      await Printing.layoutPdf(
+        onLayout: (_) => _pdfBytes!,
+        name: 'Laporan_Akhir_${widget.academicYear.name}',
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.expenseText,
+            content: Text('Galat pratinjau: $e'),
+          ),
+        );
       }
     }
   }
@@ -170,13 +199,20 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
           subject: 'Laporan Akhir Kas - ${widget.academicYear.name}',
         ),
       );
+      if (mounted) {
+        setState(() => _isPdfShared = true);
+      }
     } catch (_) {
-      // User boleh membatalkan share sheet; tetap lanjut ke tahap berikutnya.
+      // Pembatalan share sheet diabaikan.
     }
-    if (mounted) {
-      setState(() => _step = _TermStep.working);
-      await _prepareJsonBackup();
-    }
+  }
+
+  Future<void> _goToStep2Json() async {
+    setState(() {
+      _step = _TermStep.working;
+      _error = null;
+    });
+    await _prepareJsonBackup();
   }
 
   Future<void> _prepareJsonBackup() async {
@@ -202,12 +238,13 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
       if (!mounted) return;
       setState(() {
         _jsonFile = jsonFile;
+        _isJsonShared = false;
         _step = _TermStep.jsonShare;
       });
     } catch (e) {
       if (mounted) {
         setState(() {
-          _step = _TermStep.intro;
+          _step = _TermStep.pdfShare;
           _error = 'Gagal membuat berkas cadangan: $e';
         });
       }
@@ -225,32 +262,27 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
           subject: 'Cadangan Kas Kelas - ${widget.academicYear.name}',
         ),
       );
+      if (mounted) {
+        setState(() => _isJsonShared = true);
+      }
     } catch (_) {
-      // User boleh membatalkan share sheet; tetap lanjut ke tahap konfirmasi.
-    }
-    if (mounted) {
-      setState(() => _step = _TermStep.confirmWipe);
+      // Pembatalan share sheet diabaikan.
     }
   }
 
   Future<void> _executeWipe() async {
-    setState(() => _step = _TermStep.working);
+    setState(() {
+      _step = _TermStep.working;
+      _workingMessage = 'Mereset data dan membersihkan kas...';
+      _error = null;
+    });
     try {
       final db = ref.read(databaseProvider);
       await db.clearAllData();
 
-      // Invalidate seluruh provider reaktif agar UI kembali ke onboarding.
-      ref.invalidate(activeAcademicYearProvider);
-      ref.invalidate(allAcademicYearsProvider);
-      ref.invalidate(balanceStatsProvider);
-      ref.invalidate(recentTransactionsProvider);
-      ref.invalidate(allTransactionsProvider);
-      ref.invalidate(reportTransactionsProvider);
-      ref.invalidate(currentDuesPeriodProvider);
-      ref.invalidate(currentPeriodSummaryProvider);
-      ref.invalidate(selectedReportRangeProvider);
-      ref.invalidate(selectedReportYearIdProvider);
-
+      // Perhatian: JANGAN panggil ref.invalidate(...) di sini!
+      // Karena jika di-invalidate saat dialog masih terbuka, DashboardScreen di latar belakang
+      // akan mendeteksi activeYear == null dan memicu dialog onboarding menimpa layar sukses ini.
       if (!mounted) return;
       setState(() => _step = _TermStep.done);
     } catch (e) {
@@ -263,8 +295,26 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
     }
   }
 
+  void _finishAndProceedToOnboarding() {
+    // 1. Tutup dialog sukses ini dengan nilai true (menandakan penghapusan berhasil)
+    Navigator.of(context).pop(true);
+
+    // 2. Segarkan/batalkan semua provider reaktif setelah dialog sukses ditutup,
+    //    sehingga transisi ke onboarding berlangsung mulus dan berada di posisi paling depan.
+    ref.invalidate(activeAcademicYearProvider);
+    ref.invalidate(allAcademicYearsProvider);
+    ref.invalidate(balanceStatsProvider);
+    ref.invalidate(recentTransactionsProvider);
+    ref.invalidate(allTransactionsProvider);
+    ref.invalidate(reportTransactionsProvider);
+    ref.invalidate(currentDuesPeriodProvider);
+    ref.invalidate(currentPeriodSummaryProvider);
+    ref.invalidate(selectedReportRangeProvider);
+    ref.invalidate(selectedReportYearIdProvider);
+  }
+
   void _close() {
-    Navigator.of(context).pop();
+    Navigator.of(context).pop(false);
   }
 
   @override
@@ -452,16 +502,16 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
   }
 
   Widget _buildWorking() {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 28),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28),
       child: Center(
         child: Column(
           children: [
-            CircularProgressIndicator(color: AppColors.brandPrimary),
-            SizedBox(height: 14),
+            const CircularProgressIndicator(color: AppColors.brandPrimary),
+            const SizedBox(height: 14),
             Text(
-              'Menyiapkan berkas pengamanan data...',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+              _workingMessage,
+              style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -519,51 +569,136 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
     );
   }
 
-  Widget _buildFileActionRow({
+  Widget _buildFileActionCard({
     required IconData icon,
     required Color iconColor,
     required String title,
     required String subtitle,
-    required String buttonLabel,
-    required VoidCallback onPressed,
+    required VoidCallback onShare,
+    VoidCallback? onPreview,
+    required String shareButtonLabel,
+    bool isShared = false,
   }) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.borderSubtle),
+        color: AppColors.canvasLight,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isShared ? AppColors.incomeText.withValues(alpha: 0.5) : AppColors.borderSubtle,
+          width: isShared ? 1.5 : 1,
+        ),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: iconColor, size: 28),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary, height: 1.3),
+                child: Icon(icon, color: iconColor, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (isShared) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: AppColors.incomeBg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppColors.incomeText.withValues(alpha: 0.35)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_rounded, size: 13, color: AppColors.incomeText),
+                      SizedBox(width: 4),
+                      Text(
+                        'Tersimpan',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.incomeText,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
-            ),
+            ],
           ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandPrimary,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-            onPressed: onPressed,
-            child: Text(buttonLabel, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              if (onPreview != null) ...[
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandPrimary,
+                      side: const BorderSide(color: AppColors.brandPrimary),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    onPressed: onPreview,
+                    icon: const Icon(Icons.visibility_rounded, size: 16),
+                    label: const Text(
+                      'Pratinjau PDF',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: isShared ? AppColors.incomeText : AppColors.brandPrimary,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: onShare,
+                  icon: Icon(isShared ? Icons.check_rounded : Icons.share_rounded, size: 16),
+                  label: Text(
+                    isShared ? 'Bagikan Ulang' : shareButtonLabel,
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -571,6 +706,13 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
   }
 
   Widget _buildPdfShare() {
+    final pdfSizeStr = _pdfBytes != null
+        ? '${(_pdfBytes!.length / 1024).toStringAsFixed(1)} KB'
+        : 'PDF';
+    final cleanYearName = widget.academicYear.name
+        .replaceAll(RegExp(r'[^\w\s]+'), '')
+        .replaceAll(' ', '_');
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -578,28 +720,47 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
           1,
           2,
           'Simpan PDF Laporan Lengkap',
-          'Berkas PDF berisi seluruh transaksi dari awal hingga akhir, audit tunggakan, dan catatan penyerahan Anda. '
-          'Ketuk "Simpan" lalu pilih Google Drive, WhatsApp, atau Simpan ke Perangkat.',
+          'Berkas PDF berisi seluruh arus kas, catatan pertanggungjawaban, dan audit tunggakan. '
+          'Buka pratinjau untuk memeriksa isi laporan atau simpan langsung ke Google Drive / WhatsApp.',
         ),
         const SizedBox(height: 14),
-        _buildFileActionRow(
+        _buildFileActionCard(
           icon: Icons.picture_as_pdf_rounded,
           iconColor: AppColors.expenseText,
-          title: 'Laporan_Akhir_${widget.academicYear.name}',
-          subtitle: 'PDF laporan pertanggungjawaban lengkap',
-          buttonLabel: 'Simpan',
-          onPressed: _sharePdf,
+          title: 'Laporan_Akhir_$cleanYearName.pdf',
+          subtitle: 'Ukuran: $pdfSizeStr • Laporan pertanggungjawaban kas',
+          onPreview: _previewPdf,
+          onShare: _sharePdf,
+          shareButtonLabel: 'Simpan / Bagikan',
+          isShared: _isPdfShared,
         ),
-        const SizedBox(height: 12),
-        const Text(
-          'Sudah tersimpan? Lanjut ke berkas cadangan berikutnya.',
-          style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandPrimary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: _goToStep2Json,
+            icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+            label: const Text(
+              'Lanjut ke Cadangan Data (2/2)',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ),
         ),
       ],
     );
   }
 
   Widget _buildJsonShare() {
+    final jsonSizeStr = _jsonFile != null && _jsonFile!.existsSync()
+        ? '${(_jsonFile!.lengthSync() / 1024).toStringAsFixed(1)} KB'
+        : 'JSON';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -608,21 +769,37 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
           2,
           'Simpan Berkas Cadangan Data (JSON)',
           'Berkas ini berisi seluruh data mentah (siswa, transaksi, periode kas, pembayaran). '
-          'Bisa dipulihkan kembali lewat menu Cadangkan & Pulihkan jika suatu saat diperlukan.',
+          'Simpan berkas ini di tempat aman agar dapat dipulihkan sewaktu-waktu.',
         ),
         const SizedBox(height: 14),
-        _buildFileActionRow(
+        _buildFileActionCard(
           icon: Icons.data_object_rounded,
           iconColor: const Color(0xFF2563EB),
           title: _jsonFilename,
-          subtitle: 'Cadangan data lengkap format JSON',
-          buttonLabel: 'Simpan',
-          onPressed: _shareJson,
+          subtitle: 'Ukuran: $jsonSizeStr • Cadangan data lengkap format JSON',
+          onShare: _shareJson,
+          shareButtonLabel: 'Simpan / Bagikan',
+          isShared: _isJsonShared,
         ),
-        const SizedBox(height: 12),
-        const Text(
-          'Sudah tersimpan? Lanjut ke konfirmasi reset data.',
-          style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.expenseText,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              setState(() => _step = _TermStep.confirmWipe);
+            },
+            icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+            label: const Text(
+              'Lanjut ke Konfirmasi Reset',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+            ),
+          ),
         ),
       ],
     );
@@ -651,31 +828,55 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
         ),
         const SizedBox(height: 14),
         const Text(
-          'Jabatan Berakhir',
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+          'Data Berhasil Dihapus',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         const Text(
-          'Seluruh data telah dihapus dan aplikasi kembali ke kondisi baru. '
-          'Bendahara berikutnya dapat mulai mengatur kelas dari awal. '
-          'Terima kasih atas tanggung jawab Anda!',
+          'Seluruh data kelas dan catatan kas telah dibersihkan secara permanen. '
+          'Jabatan perbendaharaan periode ini telah resmi diakhiri.',
           textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.45),
+          style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary, height: 1.45),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.canvasLight,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.borderSubtle),
+          ),
+          child: const Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.check_circle_outline_rounded, size: 18, color: AppColors.incomeText),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Kedua berkas pengamanan (PDF & JSON) telah diamankan. '
+                  'Aplikasi kini siap dikonfigurasi kembali untuk tahun ajaran baru.',
+                  style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary, height: 1.4),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
         SizedBox(
           width: double.infinity,
-          child: ElevatedButton(
+          child: ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.brandPrimary,
+              foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               padding: const EdgeInsets.symmetric(vertical: 12),
             ),
-            onPressed: _close,
-            child: const Text(
-              'Selesai',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+            icon: const Icon(Icons.arrow_forward_rounded, size: 18),
+            label: const Text(
+              'Lanjut ke Pengaturan Kelas Baru',
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
+            onPressed: _finishAndProceedToOnboarding,
           ),
         ),
       ],
@@ -701,6 +902,122 @@ class _ConfirmWipeStepState extends State<_ConfirmWipeStep> {
   }
 
   bool get _isConfirmed => _controller.text.trim().toUpperCase() == 'HAPUS';
+
+  Future<void> _handleConfirmWipe(BuildContext context) async {
+    // Modal Konfirmasi 1 / 2
+    final confirmFirst = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.expenseBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.warning_amber_rounded,
+                color: AppColors.expenseText,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Konfirmasi Penghapusan (1/2)',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Apakah Anda yakin ingin menghapus seluruh data kelas ini?\n\n'
+          'Semua nama siswa, catatan transaksi kas, dan riwayat pembayaran '
+          'akan dihapus permanen dari perangkat ini.',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.expenseText,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Lanjut ke Peringatan Akhir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmFirst != true || !context.mounted) return;
+
+    // Modal Konfirmasi 2 / 2
+    final confirmSecond = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.expenseBg,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.delete_forever_rounded,
+                color: AppColors.expenseText,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Text(
+                'Peringatan Terakhir (2/2)',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Tindakan ini TIDAK DAPAT DIBATALKAN.\n\n'
+          'Pastikan berkas PDF laporan pertanggungjawaban dan berkas Cadangan JSON '
+          'sudah benar-benar Anda simpan di luar aplikasi (Google Drive / WhatsApp).\n\n'
+          'Lanjutkan penghapusan data sekarang?',
+          style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.45),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.expenseText,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Hapus Permanen Sekarang'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmSecond != true || !context.mounted) return;
+
+    // Jika kedua modal konfirmasi disetujui, langsung jalankan proses penghapusan
+    (context.findAncestorStateOfType<_EndTermDialogState>())?._executeWipe();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -762,9 +1079,7 @@ class _ConfirmWipeStepState extends State<_ConfirmWipeStep> {
               'Hapus Semua Data & Akhiri Jabatan',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
             ),
-            onPressed: _isConfirmed
-                ? () => (context.findAncestorStateOfType<_EndTermDialogState>())?._executeWipe()
-                : null,
+            onPressed: _isConfirmed ? () => _handleConfirmWipe(context) : null,
           ),
         ),
       ],

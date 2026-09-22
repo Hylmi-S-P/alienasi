@@ -78,6 +78,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           );
         }
 
+        _setupDialogShown = false;
+
         final stats = statsAsync.value ??
             const BalanceStats(totalBalance: 0, monthlyIncome: 0, monthlyExpense: 0);
         final recentItems = recentTxAsync.value ?? [];
@@ -150,9 +152,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             icon: const Icon(Icons.more_vert_rounded, color: AppColors.textSecondary, size: 20),
                             tooltip: 'Menu Lainnya',
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            onSelected: (value) {
+                            onSelected: (value) async {
                               if (value == 'end_term') {
-                                EndTermDialog.show(context, academicYear: activeYear);
+                                final didReset = await EndTermDialog.show(context, academicYear: activeYear);
+                                if (didReset == true && context.mounted) {
+                                  _setupDialogShown = true;
+                                  ClassSetupDialog.show(context, isDismissible: false);
+                                }
                               }
                             },
                             itemBuilder: (context) => [

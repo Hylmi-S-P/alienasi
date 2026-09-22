@@ -2,8 +2,8 @@
 
 > **Dokumen Catatan Konteks Menyeluruh (*Complete Context Dump & Knowledge Base*)**  
 > **Aplikasi**: Bendahara Kelas (Flutter Mobile - Android)  
-> **Terakhir Diperbarui**: 21 September 2026 (v1.0.3+4)  
-> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.0.3 Build 4)  
+> **Terakhir Diperbarui**: 21 September 2026 (v1.0.7+8)  
+> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.0.7 Build 8)  
 > **Lokasi Berkas**: `docs/CONTEXT_DUMP.md`
 
 ---
@@ -68,8 +68,8 @@ bendehara v2/
 │   │   ├── theme/             # Material 3 Theme setup
 │   │   └── widgets/           # FinancialChartCard, TransactionListItem, dsb.
 │   └── main.dart              # Titik masuk aplikasi
-├── test/                      # 242 unit, widget, service, & e2e automated tests (28 suites)
-└── Bendahara-Kelas-Release.apk # Berkas executable final siap pasang (v1.0.3+4, ~67.5 MB)
+├── test/                      # 251 unit, widget, service, & e2e automated tests (28 suites)
+└── Bendahara-Kelas-Release.apk # Berkas executable final siap pasang (v1.0.7+8, ~67.9 MB)
 ```
 
 ---
@@ -341,6 +341,42 @@ Berikut adalah rekapitulasi seluruh permasalahan, investigasi, solusi, dan perba
      - Fitur pencatatan pengeluaran dan pemasukan kas umum kelas pada menu Transaksi tetap 100% bebas dicatat kapan saja (baik hari Sabtu, Minggu, maupun hari libur nasional).
      - Seluruh transaksi kas umum tersebut 100% masuk ke perhitungan saldo kas kelas, grafik keuangan, dan laporan buku kas umum tanpa hambatan atau penolakan apa pun.
 
+### 33. Perbaikan Total Alur Akhiri Jabatan Bendahara (End Term Dialog) [v1.0.6+7]
+- **Konteks Masalah**:
+  1. Menutup dialog "Catatan Bendahara" menggunakan tombol silang `(X)` menyebabkan animasi pemuatan tanpa henti (*infinite loading* `"Menyiapkan berkas pengamanan data..."`) karena state dialog telah berubah ke tahap proses sebelum catatan selesai diinput atau dibatalkan.
+  2. Pada tahap 1/2 ("Simpan PDF Laporan Lengkap"), judul berkas terhimpit secara vertikal (1 karakter per baris, misal `L \n a \n p \n o ...`) karena kekangan `Row` tanpa pembatasan lebar di dalam `SingleChildScrollView`, serta hilangnya tombol aksi simpan/ekspor dan tidak adanya fitur pratinjau PDF.
+  3. Proses terkunci di langkah 1/2 dan tidak dapat melanjutkan ke langkah 2/2 (Cadangan Data JSON) maupun konfirmasi akhir penghapusan data.
+- **Solusi & Rekayasa UI/UX**:
+  1. **Urutan Pemanggilan Aman (*Pre-flight Note Prompt*)**:
+     - Pemanggilan `ReportNoteDialog` dipindahkan sebelum transisi state ke `_TermStep.working`.
+     - Jika pengguna menekan tombol silang `(X)`, fungsi langsung membatalkan tanpa flicker loading dan mengembalikan pengguna ke tampilan pengantar awal (*intro step*).
+  2. **Struktur Kartu Berkas Penuh (*File Action Card*)**:
+     - Menggantikan tata letak baris horizontal rapuh dengan `_buildFileActionCard` berorientasi vertikal dengan lebar penuh (`width: double.infinity`).
+     - Judul berkas dialokasikan hingga 2 baris dengan pemotongan elipsis anggun (`maxLines: 2, overflow: TextOverflow.ellipsis`), mencegah teks terhimpit vertikal.
+     - Menyediakan baris tombol aksi ganda:
+       - **Pratinjau PDF** (`OutlinedButton`): Membuka pratinjau asli sistem menggunakan `Printing.layoutPdf` sehingga pengguna dapat melihat isi laporan PDF sebelum disimpan/dibagikan.
+       - **Simpan / Bagikan** (`ElevatedButton`): Memanggil dialog sistem `Share.shareXFiles` untuk menyimpan atau mengirimkan berkas PDF/JSON.
+  3. **Navigasi Langkah Terpisah & Eksplisit**:
+     - Menyediakan tombol primer navigasi manual:
+       - `"Lanjut ke Cadangan Data (2/2)"` pada langkah 1/2.
+       - `"Lanjut ke Konfirmasi Reset"` pada langkah 2/2.
+     - Menjamin pengguna memiliki kendali penuh untuk meninjau dan melanjutkan setiap langkah secara berurutan tanpa bergantung pada callback platform share sheet yang bervariasi antar perangkat Android.
+     - Ditambahkan badge visual `"Tersimpan"` berwarna hijau setelah berkas berhasil dibagikan.
+
+### 34. Konfirmasi Penghapusan Bertingkat (2 Modal) & Alur Transisi Pesan Sukses [v1.0.7+8]
+- **Konteks Masalah**:
+  1. Setelah mengetik kata kunci `HAPUS`, diperlukan lapis pengamanan ganda berupa 2 dialog modal konfirmasi berurutan untuk menjamin kepastian mutlak sebelum penghapusan permanen dieksekusi.
+  2. Sebelumnya, pesan sukses tertutup oleh form onboarding karena `ref.invalidate(...)` dipanggil saat dialog masih terbuka, sehingga `DashboardScreen` di latar belakang langsung mendeteksi `activeYear == null` dan memunculkan dialog onboarding di atas dialog sukses.
+- **Solusi & Rekayasa UI/UX**:
+  1. **Dua Modal Konfirmasi Berurutan (*Two-Stage Confirmation Modals*)**:
+     - **Modal 1 (Konfirmasi 1/2)**: Menanyakan kepastian pengguna dengan rincian data yang akan dihapus permanen. Dilengkapi tombol *Batal* dan *Lanjut ke Peringatan Akhir*.
+     - **Modal 2 (Peringatan Terakhir 2/2)**: Menegaskan bahwa tindakan tidak dapat dibatalkan dan mengingatkan verifikasi berkas PDF serta JSON di luar aplikasi. Dilengkapi tombol *Batal* dan tombol destruktif merah *Hapus Permanen Sekarang*.
+     - Jika salah satu modal dibatalkan, proses berhenti seketika dan form input tetap utuh.
+  2. **Tampilan Pesan Sukses Sebelum Onboarding**:
+     - Pembersihan basis data tidak lagi menginvalidasi provider saat dialog masih terbuka, melainkan langsung menampilkan layar sukses `"Data Berhasil Dihapus"` dengan lencana hijau terverifikasi.
+     - Disediakan tombol konfirmasi eksplisit: `"Lanjut ke Pengaturan Kelas Baru"`.
+     - Saat tombol tersebut ditekan, dialog ditutup dengan aman (`Navigator.of(context).pop(true)`), barulah seluruh provider reaktif di-invalidate, dan `ClassSetupDialog` onboarding muncul di lapisan terdepan.
+
 ---
 
 ## 4. Audit & Optimasi Performa Menyeluruh (Performance Engineering)
@@ -378,38 +414,43 @@ No issues found! (ran in 2.1s)
 
 ### B. Hasil Pengujian Otomatis (`flutter test`)
 ```
-00:13 +242: All tests passed!
+00:13 +251: All tests passed!
 ```
-Sebanyak **242 skenario pengujian komprehensif** (100% lulus di seluruh 28 test suites) mencakup:
-1. `test/e2e/e2e_full_acceptance_test.dart` (19 tests) [NEW]: Pengujian penerimaan end-to-end menyeluruh memvalidasi seluruh kebutuhan R1–R5:
+Sebanyak **251 skenario pengujian komprehensif** (100% lulus di seluruh 28 test suites) mencakup:
+1. `test/e2e/e2e_full_acceptance_test.dart` (19 tests): Pengujian penerimaan end-to-end menyeluruh memvalidasi seluruh kebutuhan R1–R5:
    - **R1**: Listing transaksi tanpa batas paginasi 10 data, pencarian real-time pada judul/keterangan dengan tombol reset instan `(x)`, filter cepat ChoiceChips (`Kas Masuk`, `Kas Keluar`, `Semua`), kalkulasi kartu ringkasan mutasi dinamis (`Total Masuk`, `Total Keluar`, `Selisih`), dan navigasi dari Bagian 5 Laporan Supervisi.
    - **R2**: Pengurutan riwayat pencatatan terkini berdasarkan `createdAt DESC`, verifikasi transaksi mundur (*backdated*) langsung tampil teratas di dashboard, format tanggal ganda transparan, badge `"Mundur"`, dan dialog rincian audit.
    - **R3**: Partisi tabel laporan keuangan PDF per bulan kalender dengan header bahasa Indonesia resmi (`BULAN JULI 2026`), sorotan warna merah kontras (*soft red background* dan *bold red text*) pada pengeluaran, serta subtotal bulanan.
    - **R4**: Tabel audit rekapitulasi tunggakan kas siswa (`REKAPITULASI TUNGGAKAN KAS SISWA`) di PDF dengan rincian debtor, tarif, rentang hari/minggu belum bayar, total kelas, badge hijau *"Nihil Tunggakan (100% Tertib Kas)"*, dan multi-page pagination aman (`maxPages: 100`).
    - **R5**: Pengecualian mutlak hari Sabtu dan Minggu dari kas harian, *Activity-Driven Holiday Rule* (hari kerja dengan 0 bayar diakui libur tanpa tunggakan), dan kebebasan 100% pencatatan transaksi kas umum kapan saja (termasuk weekend/tanggal merah) masuk ke saldo.
    - **Tier 4 Workload**: Siklus penuh perbendaharaan multi-bulan mengintegrasikan weekend, transaksi backdated, mutasi pengeluaran, rekap tunggakan, dan ekspor PDF.
-2. `test/widget/all_transactions_screen_test.dart` (6 tests) [NEW]: Pengujian UI komprehensif `AllTransactionsScreen`, pencarian dinamis, filter chips, tap transaksi, dan kartu mutasi.
-3. `test/service/dues_arrears_service_test.dart` (8 tests) [NEW]: Pengujian logika penentuan hari libur, tanggal merah, kalkulasi tunggakan siswa, dan pemisahan transaksi umum.
-4. `test/service/pdf_monthly_partition_and_arrears_test.dart` (4 tests) [NEW]: Pengujian partisi tabel PDF bulanan, sorotan pengeluaran, dan audit tunggakan multi-halaman.
-5. `test/widget/dashboard_recent_recordings_test.dart` (3 tests) [NEW]: Pengujian urutan input `createdAt DESC` dan badge tanggal ganda pada dashboard.
-6. `test/widget/challenger_m2_empirical_test.dart` & `challenger_m2_2_adversarial_test.dart` (20+ tests): Pengujian ketahanan batas, navigasi bolak-balik 10 siklus, ultra-narrow screen (280px), dan keyboard virtual.
-7. `test/select_all_students_dues_test.dart` (2 tests): Pengujian sekali ketuk "Centang Semua (N)", deseleksi massal, dan tombol dinamis.
-8. `test/reconciled_date_and_pdf_table_test.dart` (5 tests): Validasi parsing tanggal label periode, ekstraksi tanggal judul, dan migrasi transaksional.
-9. `test/excel_export_test.dart`: Pengujian ekspor spreadsheet biner murni `.xlsx` multi-sheet.
-10. `test/backup_restore_test.dart` & `backup_restore_dialog_test.dart`: Pengujian roundtrip cadangan JSON lokal dan pemulihan atomik SQLite.
-11. Keseluruhan 18 test suite warisan lainnya (unit, widget, edge cases, dues lock, edit student, thousand separator, dll.) yang seluruhnya lulus 100% tanpa regresi.
+2. `test/widget/end_term_dialog_test.dart` (4 tests) [UPDATED]: Pengujian end-to-end dialog Akhiri Jabatan Bendahara:
+   - Pembatalan catatan via `(X)` tanpa infinite loading.
+   - Rendering kartu aksi berkas langkah 1/2 (bebas teks vertikal, tombol pratinjau PDF dan simpan/bagikan).
+   - Navigasi terpisah ke langkah 2/2 cadangan JSON.
+   - Layar konfirmasi penghapusan permanen ("HAPUS") dengan 2 dialog modal konfirmasi berurutan, uji batal pada masing-masing modal, eksekusi pembersihan, serta penampilan layar sukses `"Data Berhasil Dihapus"` sebelum lanjut ke dialog onboarding.
+3. `test/widget/all_transactions_screen_test.dart` (6 tests): Pengujian UI komprehensif `AllTransactionsScreen`, pencarian dinamis, filter chips, tap transaksi, dan kartu mutasi.
+4. `test/service/dues_arrears_service_test.dart` (8 tests): Pengujian logika penentuan hari libur, tanggal merah, kalkulasi tunggakan siswa, dan pemisahan transaksi umum.
+5. `test/service/pdf_monthly_partition_and_arrears_test.dart` (4 tests): Pengujian partisi tabel PDF bulanan, sorotan pengeluaran, dan audit tunggakan multi-halaman.
+6. `test/widget/dashboard_recent_recordings_test.dart` (3 tests): Pengujian urutan input `createdAt DESC` dan badge tanggal ganda pada dashboard.
+7. `test/widget/challenger_m2_empirical_test.dart` & `challenger_m2_2_adversarial_test.dart` (20+ tests): Pengujian ketahanan batas, navigasi bolak-balik 10 siklus, ultra-narrow screen (280px), dan keyboard virtual.
+8. `test/select_all_students_dues_test.dart` (2 tests): Pengujian sekali ketuk "Centang Semua (N)", deseleksi massal, dan tombol dinamis.
+9. `test/reconciled_date_and_pdf_table_test.dart` (5 tests): Validasi parsing tanggal label periode, ekstraksi tanggal judul, dan migrasi transaksional.
+10. `test/excel_export_test.dart`: Pengujian ekspor spreadsheet biner murni `.xlsx` multi-sheet.
+11. `test/backup_restore_test.dart` & `backup_restore_dialog_test.dart`: Pengujian roundtrip cadangan JSON lokal dan pemulihan atomik SQLite.
+12. Seluruh test suite lainnya (unit, widget, edge cases, dues lock, edit student, thousand separator, dll.) yang seluruhnya lulus 100% tanpa regresi.
 
-> **Status Suite Pengujian**: Sebanyak **242 pengujian otomatis** (`flutter test`) lulus 100% tanpa kegagalan (0 error, 0 lint issue pada `flutter analyze`).
+> **Status Suite Pengujian**: Sebanyak **251 pengujian otomatis** (`flutter test`) lulus 100% tanpa kegagalan (0 error, 0 lint issue pada `flutter analyze`).
 
 ---
 
 ## 6. Berkas Rilis APK Universal Siap Pakai
 
-Berkas APK Release final telah dikompilasi dengan konfigurasi *release optimization*, peningkatan nomor versi rilis (*versionCode bump* ke Build 4), dan tanda tangan *universal debug-signing* (sehingga dapat dipasang langsung di perangkat Android mana pun tanpa blokir Google Play Protect dan dapat di-update langsung di atas instalasi lama tanpa perlu uninstall):
+Berkas APK Release final telah dikompilasi dengan konfigurasi *release optimization*, peningkatan nomor versi rilis (*versionCode bump* ke Build 8), dan tanda tangan *universal debug-signing* (sehingga dapat dipasang langsung di perangkat Android mana pun tanpa blokir Google Play Protect dan dapat di-update langsung di atas instalasi lama tanpa perlu uninstall):
 
 - **Jalur Berkas**: [`Bendahara-Kelas-Release.apk`](file:///D:/project/bendehara v2/Bendahara-Kelas-Release.apk) (berada di direktori utama proyek)
-- **Ukuran Berkas**: ~67,5 MB (70.794.610 bytes)
-- **Versi Rilis**: v1.0.3+4 (Version Code: 4)
+- **Ukuran Berkas**: ~67,9 MB
+- **Versi Rilis**: v1.0.7+8 (Version Code: 8)
 - **Ikon Peluncur**: Custom Buku Kas Hijau Emerald & Koin Emas
 - **Kompatibilitas**: Android 5.0 Lollipop (API 21) hingga Android 14/15 (API 34/35)
 - **Status Pembaruan**: Siap *in-place update* langsung di atas APK sebelumnya tanpa kehilangan data.
