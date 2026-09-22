@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'domain/services/receipt_storage_service.dart';
 import 'presentation/screens/main_scaffold.dart';
 import 'presentation/theme/app_theme.dart';
 
@@ -8,6 +9,7 @@ import 'package:intl/date_symbol_data_local.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('id_ID', null);
+  await ReceiptStorageService.warmUpCache();
   runApp(
     const ProviderScope(
       child: BendaharaApp(),

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
 import '../../data/database/app_database.dart';
+import 'receipt_storage_service.dart';
 
 class BackupPreviewData {
   final String academicYearName;
@@ -11,6 +12,7 @@ class BackupPreviewData {
   final int periodsCount;
   final int totalBalance;
   final DateTime exportedAt;
+  final int receiptsCount;
 
   const BackupPreviewData({
     required this.academicYearName,
@@ -21,6 +23,7 @@ class BackupPreviewData {
     required this.periodsCount,
     required this.totalBalance,
     required this.exportedAt,
+    this.receiptsCount = 0,
   });
 }
 
@@ -60,11 +63,30 @@ class BackupRestoreService {
               ..where((t) => t.duesPeriodId.isIn(periodIds)))
             .get();
 
+    // Sertakan bukti foto nota (disimpan sebagai base64 agar berkas cadangan
+    // mandiri satu berkas .json dan foto tidak pernah tertinggal).
+    final receiptPhotos = <Map<String, dynamic>>[];
+    for (final tx in transactions) {
+      final path = tx.receiptImagePath;
+      if (path == null || path.isEmpty) continue;
+
+      final bytes = await ReceiptStorageService.readBytes(path);
+      if (bytes == null || bytes.isEmpty) continue;
+
+      receiptPhotos.add({
+        'transactionId': tx.id,
+        'path': path,
+        'fileName': path.split('/').last,
+        'bytesBase64': base64Encode(bytes),
+      });
+    }
+
     final backupMap = <String, dynamic>{
       'app': 'Bendahara Kelas',
-      'version': '1.0.1',
+      'version': '1.0.7',
       'schemaVersion': 2,
       'exportedAt': DateTime.now().toIso8601String(),
+      'receiptPhotos': receiptPhotos,
       'academicYear': {
         'id': year.id,
         'name': year.name,
@@ -166,6 +188,7 @@ class BackupRestoreService {
     final studentsList = (decoded['students'] as List<dynamic>?) ?? [];
     final txList = (decoded['transactions'] as List<dynamic>?) ?? [];
     final periodsList = (decoded['duesPeriods'] as List<dynamic>?) ?? [];
+    final receiptsList = (decoded['receiptPhotos'] as List<dynamic>?) ?? [];
 
     var balance = 0;
     for (final item in txList) {
@@ -193,6 +216,7 @@ class BackupRestoreService {
       periodsCount: periodsList.length,
       totalBalance: balance,
       exportedAt: exportedAt,
+      receiptsCount: receiptsList.length,
     );
   }
 
@@ -216,6 +240,7 @@ class BackupRestoreService {
     final txList = (decoded['transactions'] as List<dynamic>?) ?? [];
     final periodsList = (decoded['duesPeriods'] as List<dynamic>?) ?? [];
     final paymentsList = (decoded['duesPayments'] as List<dynamic>?) ?? [];
+    final receiptsList = (decoded['receiptPhotos'] as List<dynamic>?) ?? [];
 
     await db.transaction(() async {
       // 1. Bersihkan data relasional lama untuk kelas ini agar tidak terjadi bentrok
@@ -348,5 +373,35 @@ class BackupRestoreService {
         }
       }
     });
+
+    // 8. Pulihkan berkas foto nota ke penyimpanan aplikasi (di luar transaksi
+    //    DB karena melibatkan I/O berkas yang lebih lambat).
+    for (final rawReceipt in receiptsList) {
+      if (rawReceipt is Map<String, dynamic>) {
+        final path = rawReceipt['path'] as String?;
+        final bytesBase64 = rawReceipt['bytesBase64'] as String?;
+        if (path == null || bytesBase64 == null || bytesBase64.isEmpty) continue;
+
+        try {
+          final bytes = Uint8List.fromList(base64Decode(bytesBase64));
+          final restoredPath = await ReceiptStorageService.writeReceiptBytes(
+            bytes,
+            extension: path.contains('.') ? '.${path.split('.').last}' : '.jpg',
+          );
+          // Tulis ulang path foto di DB agar menunjuk berkas hasil pemulihan
+          // (path lama mungkin berbeda UUID).
+          final txId = rawReceipt['transactionId'] as String?;
+          if (restoredPath != null && txId != null) {
+            await (db.update(db.transactions)..where((t) => t.id.equals(txId))).write(
+              TransactionsCompanion(
+                receiptImagePath: Value(restoredPath),
+              ),
+            );
+          }
+        } catch (_) {
+          // Foto yang gagal dipulihkan tidak boleh menggagalkan restore data.
+        }
+      }
+    }
   }
 }

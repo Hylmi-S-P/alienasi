@@ -4,38 +4,62 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/date_formatter.dart';
+import '../../data/repositories/transaction_repository.dart';
 import '../../domain/services/receipt_storage_service.dart';
 import '../providers/app_providers.dart';
 import 'dialogs/category_management_dialog.dart';
 
-class TransactionFormScreen extends ConsumerStatefulWidget {
-  final String initialType; // 'income' or 'expense'
-  final VoidCallback? onBackToDashboard;
+/// Layar koreksi / ubah transaksi kas yang sudah tercatat.
+///
+/// Prinsip audit: `createdAt` (waktu pencatatan pertama) tidak pernah
+/// diubah. Pengguna dapat mengoreksi nominal, kategori, judul, keterangan,
+/// tanggal transaksi, dan foto nota.
+class EditTransactionScreen extends ConsumerStatefulWidget {
+  final TransactionWithCategory item;
+  final VoidCallback? onBack;
 
-  const TransactionFormScreen({
+  const EditTransactionScreen({
     super.key,
-    this.initialType = 'expense',
-    this.onBackToDashboard,
+    required this.item,
+    this.onBack,
   });
 
   @override
-  ConsumerState<TransactionFormScreen> createState() => _TransactionFormScreenState();
+  ConsumerState<EditTransactionScreen> createState() => _EditTransactionScreenState();
 }
 
-class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
+class _EditTransactionScreenState extends ConsumerState<EditTransactionScreen> {
   final _formKey = GlobalKey<FormState>();
   late String _type;
   final _amountController = TextEditingController();
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
+  late DateTime _transactionDate;
   String? _selectedCategoryId;
   String? _receiptImagePath;
+  bool _removeReceipt = false;
   bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    _type = widget.initialType;
+    final tx = widget.item.transaction;
+    _type = tx.type;
+    _amountController.text = CurrencyFormatter.format(tx.amount, includeSymbol: false);
+    _titleController.text = tx.title;
+    _descriptionController.text = tx.description ?? '';
+    _transactionDate = tx.transactionDate;
+    _selectedCategoryId = tx.categoryId;
+    _receiptImagePath = tx.receiptImagePath;
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    _titleController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
   }
 
   void _changeType(String newType) {
@@ -45,14 +69,6 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         _selectedCategoryId = null;
       });
     }
-  }
-
-  @override
-  void dispose() {
-    _amountController.dispose();
-    _titleController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
   }
 
   void _addQuickAmount(int additional) {
@@ -75,8 +91,6 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
         maxHeight: 1600,
       );
       if (picked != null) {
-        // Salin ke penyimpanan aplikasi permanen agar tidak hilang saat
-        // cache image_picker dibersihkan sistem.
         final permanentPath = await ReceiptStorageService.persistPickedReceipt(picked.path);
         if (permanentPath == null) {
           if (mounted) {
@@ -86,7 +100,10 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           }
           return;
         }
-        setState(() => _receiptImagePath = permanentPath);
+        setState(() {
+          _receiptImagePath = permanentPath;
+          _removeReceipt = false;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -97,8 +114,37 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     }
   }
 
-  Future<void> _handleSubmit(String academicYearId, String? effectiveCategoryId, int currentBalance) async {
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _transactionDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      locale: const Locale('id', 'ID'),
+      helpText: 'Pilih Tanggal Transaksi',
+    );
+    if (picked != null) {
+      setState(() {
+        _transactionDate = DateTime(
+          picked.year,
+          picked.month,
+          picked.day,
+          _transactionDate.hour,
+          _transactionDate.minute,
+          _transactionDate.second,
+        );
+      });
+    }
+  }
+
+  Future<void> _handleSubmit() async {
     if (!_formKey.currentState!.validate()) return;
+
+    final categoriesList = ref.read(categoriesStreamProvider(_type)).value ?? [];
+    final effectiveCategoryId = (_selectedCategoryId != null && categoriesList.any((c) => c.id == _selectedCategoryId))
+        ? _selectedCategoryId
+        : (categoriesList.isNotEmpty ? categoriesList.first.id : null);
+
     if (effectiveCategoryId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Pilih kategori transaksi terlebih dahulu')),
@@ -114,85 +160,33 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       return;
     }
 
-    if (_type == 'expense' && rawAmount > currentBalance) {
-      final deficit = rawAmount - currentBalance;
-      final proceed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: const Row(
-            children: [
-              Icon(Icons.warning_amber_rounded, color: AppColors.expenseText, size: 24),
-              SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Pengeluaran Melebihi Saldo',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-                ),
-              ),
-            ],
-          ),
-          content: Text(
-            'Saldo kas saat ini adalah ${CurrencyFormatter.format(currentBalance)}. '
-            'Pengeluaran sebesar ${CurrencyFormatter.format(rawAmount)} akan membuat kas defisit (-${CurrencyFormatter.format(deficit)}).\n\n'
-            'Apakah kamu yakin nominal pengeluaran ini sudah sesuai?',
-            style: const TextStyle(fontSize: 13, height: 1.4),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Periksa Kembali', style: TextStyle(color: AppColors.textSecondary)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.expenseText),
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Tetap Simpan'),
-            ),
-          ],
-        ),
-      );
-      if (proceed != true) return;
-    }
-
     setState(() => _isLoading = true);
     try {
-      await ref.read(transactionRepoProvider).insertTransaction(
-            academicYearId: academicYearId,
+      await ref.read(transactionRepoProvider).updateTransaction(
+            transactionId: widget.item.transaction.id,
             categoryId: effectiveCategoryId,
             type: _type,
             amount: rawAmount,
             title: _titleController.text.trim(),
             description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
             receiptImagePath: _receiptImagePath,
-            transactionDate: DateTime.now(),
+            removeReceipt: _removeReceipt,
+            transactionDate: _transactionDate,
           );
 
       ref.invalidate(balanceStatsProvider);
       ref.invalidate(recentTransactionsProvider);
       ref.invalidate(reportTransactionsProvider);
-      ref.invalidate(currentPeriodSummaryProvider);
+      ref.invalidate(allTransactionsProvider);
 
       if (mounted) {
-        if (Navigator.canPop(context)) {
-          Navigator.of(context).pop();
-        } else {
-          _amountController.clear();
-          _titleController.clear();
-          _descriptionController.clear();
-          setState(() {
-            _receiptImagePath = null;
-            _selectedCategoryId = null;
-          });
-          if (widget.onBackToDashboard != null) {
-            widget.onBackToDashboard!();
-          }
-        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+          const SnackBar(
             backgroundColor: AppColors.brandPrimary,
-            content: Text('${_type == 'income' ? 'Pemasukan' : 'Pengeluaran'} berhasil dicatat!'),
+            content: Text('Transaksi berhasil diperbarui'),
           ),
         );
+        Navigator.of(context).pop(true);
       }
     } catch (e) {
       if (mounted) {
@@ -207,57 +201,24 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final activeYearAsync = ref.watch(activeAcademicYearProvider);
-    final statsAsync = ref.watch(balanceStatsProvider);
-    final activeYear = activeYearAsync.value;
-    final currentBalance = statsAsync.value?.totalBalance ?? 0;
     final categoriesAsync = ref.watch(categoriesStreamProvider(_type));
     final categoriesList = categoriesAsync.value ?? [];
+    final isIncome = _type == 'income';
 
     final effectiveCategoryId = (_selectedCategoryId != null && categoriesList.any((c) => c.id == _selectedCategoryId))
         ? _selectedCategoryId
         : (categoriesList.isNotEmpty ? categoriesList.first.id : null);
 
-    if (activeYear == null) {
-      return Scaffold(
-        appBar: AppBar(
-          leading: (Navigator.canPop(context) || widget.onBackToDashboard != null)
-              ? IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  tooltip: 'Kembali',
-                  onPressed: () {
-                    if (Navigator.canPop(context)) {
-                      Navigator.of(context).pop();
-                    } else if (widget.onBackToDashboard != null) {
-                      widget.onBackToDashboard!();
-                    }
-                  },
-                )
-              : null,
-          title: Text(_type == 'income' ? 'Catat Uang Masuk' : 'Catat Uang Keluar'),
-        ),
-        body: const Center(child: Text('Kelas belum disetel')),
-      );
-    }
-
-    final isIncome = _type == 'income';
+    final hasExistingReceipt = _receiptImagePath != null && !_removeReceipt;
 
     return Scaffold(
       appBar: AppBar(
-        leading: (Navigator.canPop(context) || widget.onBackToDashboard != null)
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back_rounded),
-                tooltip: 'Kembali',
-                onPressed: () {
-                  if (Navigator.canPop(context)) {
-                    Navigator.of(context).pop();
-                  } else if (widget.onBackToDashboard != null) {
-                    widget.onBackToDashboard!();
-                  }
-                },
-              )
-            : null,
-        title: Text(isIncome ? 'Catat Uang Masuk' : 'Catat Uang Keluar'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          tooltip: 'Kembali',
+          onPressed: () => Navigator.of(context).pop(false),
+        ),
+        title: const Text('Ubah Transaksi Kas'),
       ),
       body: SafeArea(
         child: Form(
@@ -265,44 +226,35 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
-              // 1. Status Kas Cepat & Panduan Pengisian
+              // 0. Banner Konfirmasi Koreksi
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.slateTag,
+                  color: AppColors.warningBg,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: AppColors.borderSubtle),
+                  border: Border.all(color: AppColors.warningText.withValues(alpha: 0.3)),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.brandPrimaryLight,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.info_outline_rounded, color: AppColors.brandPrimary, size: 20),
-                    ),
-                    const SizedBox(width: 12),
+                    const Icon(Icons.edit_note_rounded, color: AppColors.warningText, size: 20),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            isIncome
-                                ? 'Pencatatan Kas Masuk • ${activeYear.name}'
-                                : 'Pencatatan Pengeluaran • ${activeYear.name}',
-                            style: const TextStyle(
-                              fontSize: 13,
+                          const Text(
+                            'Mode Koreksi Transaksi',
+                            style: TextStyle(
+                              fontSize: 12.5,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.brandPrimaryDark,
+                              color: AppColors.warningText,
                             ),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            isIncome
-                                ? 'Untuk uang kas rutin siswa, gunakan tab "Kas Siswa". Gunakan form ini khusus pemasukan umum (donasi, kas awal, sisa kembalian).'
-                                : 'Catat belanja kelas (ATK, spidol, konsumsi, kebersihan). Disarankan melampirkan foto nota untuk arsip laporan.',
+                            'Waktu pencatatan awal (${DateFormatter.toHumanDateTime(widget.item.transaction.createdAt)}) '
+                            'tetap dipertahankan sebagai jejak audit.',
                             style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                           ),
                         ],
@@ -313,7 +265,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               ),
               const SizedBox(height: 14),
 
-              // 2. Tab Toggle Uang Keluar vs Uang Masuk
+              // 1. Tab Toggle Uang Keluar vs Uang Masuk
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
@@ -349,7 +301,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               ),
               const SizedBox(height: 16),
 
-              // 3. Kolom Input Nominal Uang
+              // 2. Nominal
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -360,22 +312,9 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          isIncome ? 'Nominal Pemasukan' : 'Nominal Pengeluaran',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          'Saldo Kas: ${CurrencyFormatter.format(currentBalance)}',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: currentBalance > 0 ? AppColors.brandPrimary : AppColors.expenseText,
-                          ),
-                        ),
-                      ],
+                    Text(
+                      isIncome ? 'Nominal Pemasukan' : 'Nominal Pengeluaran',
+                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 10),
                     TextFormField(
@@ -404,8 +343,6 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       },
                     ),
                     const SizedBox(height: 10),
-
-                    // Quick Amount Chips
                     Wrap(
                       spacing: 8,
                       children: [5000, 10000, 20000, 50000].map((amt) {
@@ -423,7 +360,50 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               ),
               const SizedBox(height: 14),
 
-              // 4. Kategori Transaksi
+              // 3. Tanggal Transaksi
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Tanggal Transaksi', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 10),
+                    InkWell(
+                      onTap: _pickDate,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.slateTag,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.borderSubtle),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.calendar_today_rounded, size: 18, color: AppColors.brandPrimary),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                DateFormatter.toHumanDate(_transactionDate),
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                              ),
+                            ),
+                            const Icon(Icons.edit_rounded, size: 16, color: AppColors.textSecondary),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // 4. Kategori
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -451,16 +431,8 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                       ],
                     ),
                     const SizedBox(height: 10),
-                    if (categoriesAsync.isLoading && categoriesList.isEmpty)
+                    if (categoriesList.isEmpty)
                       const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                    else if (categoriesList.isEmpty)
-                      Center(
-                        child: TextButton.icon(
-                          onPressed: () => CategoryManagementDialog.show(context, initialType: _type),
-                          icon: const Icon(Icons.add_rounded),
-                          label: const Text('Tambah Kategori Pertama'),
-                        ),
-                      )
                     else
                       Wrap(
                         spacing: 8,
@@ -484,14 +456,6 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                               },
                             );
                           }),
-                          ActionChip(
-                            avatar: const Icon(Icons.add_rounded, size: 16, color: AppColors.textSecondary),
-                            label: const Text('Tambah Baru'),
-                            labelStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-                            backgroundColor: AppColors.slateTag,
-                            side: const BorderSide(color: AppColors.borderSubtle),
-                            onPressed: () => CategoryManagementDialog.show(context, initialType: _type),
-                          ),
                         ],
                       ),
                   ],
@@ -499,7 +463,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               ),
               const SizedBox(height: 14),
 
-              // 5. Rincian & Keterangan
+              // 5. Judul & Keterangan
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -534,7 +498,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
               ),
               const SizedBox(height: 14),
 
-              // 6. Lampiran Foto Nota Fisik
+              // 6. Foto Nota
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -548,19 +512,21 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text(
-                          'Foto Nota',
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                        ),
-                        if (_receiptImagePath != null)
+                        const Text('Foto Nota', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        if (hasExistingReceipt || _removeReceipt)
                           TextButton(
-                            onPressed: () => setState(() => _receiptImagePath = null),
+                            onPressed: () {
+                              setState(() {
+                                _receiptImagePath = null;
+                                _removeReceipt = true;
+                              });
+                            },
                             child: const Text('Hapus Foto', style: TextStyle(color: AppColors.expenseText, fontSize: 12)),
                           ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    if (_receiptImagePath != null)
+                    if (hasExistingReceipt && _receiptImagePath != null)
                       Builder(
                         builder: (context) {
                           final file = File(ReceiptStorageService.resolveAbsolutePathSync(_receiptImagePath!));
@@ -576,13 +542,27 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                                 alignment: Alignment.center,
                                 color: AppColors.slateTag,
                                 child: const Text(
-                                  'Foto tidak dapat dimuat',
+                                  'Foto lama tidak dapat dimuat',
                                   style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
                                 ),
                               ),
                             ),
                           );
                         },
+                      )
+                    else if (_removeReceipt)
+                      Container(
+                        height: 70,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: AppColors.slateTag,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.borderSubtle),
+                        ),
+                        child: const Text(
+                          'Foto nota akan dihapus saat perubahan disimpan',
+                          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
                       )
                     else
                       Row(
@@ -604,6 +584,21 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                           ),
                         ],
                       ),
+                    if (hasExistingReceipt) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.textSecondary,
+                            side: const BorderSide(color: AppColors.borderSubtle),
+                          ),
+                          icon: const Icon(Icons.photo_library_outlined, size: 16),
+                          label: const Text('Ganti Foto', style: TextStyle(fontSize: 12.5)),
+                          onPressed: () => _pickImage(ImageSource.gallery),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -615,12 +610,12 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                   backgroundColor: isIncome ? AppColors.incomeText : AppColors.brandPrimary,
                   minimumSize: const Size.fromHeight(50),
                 ),
-                onPressed: _isLoading ? null : () => _handleSubmit(activeYear.id, effectiveCategoryId, currentBalance),
+                onPressed: _isLoading ? null : _handleSubmit,
                 child: _isLoading
                     ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white))
-                    : Text(
-                        isIncome ? 'Simpan Pemasukan Kas' : 'Simpan Pengeluaran Kas',
-                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                    : const Text(
+                        'Simpan Perubahan Transaksi',
+                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                       ),
               ),
               const SizedBox(height: 20),

@@ -77,12 +77,17 @@ final allTransactionsByYearProvider = StreamProvider.family<List<TransactionWith
 });
 
 // All Categories (Income + Expense)
+// Menggabungkan dua stream kategori secara reaktif (bukan snapshot .value)
+// agar perubahan kategori langsung tercermin di seluruh UI.
 final categoriesProvider = StreamProvider<List<Category>>((ref) {
-  final incomeAsync = ref.watch(categoriesStreamProvider('income'));
-  final expenseAsync = ref.watch(categoriesStreamProvider('expense'));
-  final income = incomeAsync.value ?? [];
-  final expense = expenseAsync.value ?? [];
-  return Stream.value([...income, ...expense]);
+  final incomeStream = ref.watch(transactionRepoProvider).watchCategoriesByType('income');
+  final expenseStream = ref.watch(transactionRepoProvider).watchCategoriesByType('expense');
+
+  return incomeStream.asyncExpand(
+    (income) => expenseStream.map(
+      (expense) => [...income, ...expense],
+    ),
+  );
 });
 
 
@@ -239,7 +244,7 @@ final activePeriodSummaryProvider = StreamProvider.autoDispose<DuesPeriodSummary
 });
 
 // Report Range State
-enum ReportDateRange { oneMonth, threeMonths, oneYear, allTime }
+enum ReportDateRange { oneMonth, threeMonths, oneYear, allTime, custom }
 
 class ReportRangeNotifier extends Notifier<ReportDateRange> {
   @override
@@ -250,6 +255,27 @@ class ReportRangeNotifier extends Notifier<ReportDateRange> {
 
 final selectedReportRangeProvider =
     NotifierProvider<ReportRangeNotifier, ReportDateRange>(ReportRangeNotifier.new);
+
+class CustomReportRangeNotifier extends Notifier<(DateTime, DateTime)?> {
+  @override
+  (DateTime, DateTime)? build() => null;
+
+  void setRange(DateTime start, DateTime end) {
+    // Normalisasi agar selalu start <= end
+    final s = start.isBefore(end) ? start : end;
+    final e = start.isBefore(end) ? end : start;
+    state = (
+      DateTime(s.year, s.month, s.day),
+      DateTime(e.year, e.month, e.day, 23, 59, 59),
+    );
+  }
+
+  void reset() => state = null;
+}
+
+final customReportRangeProvider =
+    NotifierProvider<CustomReportRangeNotifier, (DateTime, DateTime)?>(
+        CustomReportRangeNotifier.new);
 
 class SelectedYearIdNotifier extends Notifier<String?> {
   @override
@@ -294,8 +320,19 @@ final reportTransactionsProvider = StreamProvider<List<TransactionWithCategory>>
   late DateTime endDate;
 
   final isCurrentActive = activeYear != null && selectedYear.id == activeYear.id;
+  final customRange = ref.watch(customReportRangeProvider);
 
-  if (isCurrentActive) {
+  if (range == ReportDateRange.custom) {
+    // Mode Rentang Kustom: gunakan tanggal yang dipilih pengguna.
+    if (customRange != null) {
+      startDate = customRange.$1;
+      endDate = customRange.$2;
+    } else {
+      // Fallback sementara ke bulan berjalan jika pengguna belum memilih.
+      endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
+      startDate = DateTime(now.year, now.month, 1);
+    }
+  } else if (isCurrentActive) {
     endDate = DateTime(now.year, now.month, now.day, 23, 59, 59);
     switch (range) {
       case ReportDateRange.oneMonth:
@@ -314,6 +351,10 @@ final reportTransactionsProvider = StreamProvider<List<TransactionWithCategory>>
             : DateTime(2020, 1, 1);
         endDate = DateTime(now.year + 1, 12, 31);
         break;
+      case ReportDateRange.custom:
+        // Tidak tercapai (ditangani di atas), disimpan untuk completeness.
+        startDate = DateTime(now.year, now.month, 1);
+        break;
     }
   } else {
     final yearEnd = selectedYear.endDate;
@@ -329,6 +370,15 @@ final reportTransactionsProvider = StreamProvider<List<TransactionWithCategory>>
       case ReportDateRange.oneYear:
       case ReportDateRange.allTime:
         startDate = selectedYear.startDate;
+        break;
+      case ReportDateRange.custom:
+        // Custom pada arsip historis tetap dihormati apa adanya.
+        if (customRange != null) {
+          startDate = customRange.$1;
+          endDate = customRange.$2;
+        } else {
+          startDate = selectedYear.startDate;
+        }
         break;
     }
   }

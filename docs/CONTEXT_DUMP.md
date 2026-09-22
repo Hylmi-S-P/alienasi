@@ -2,8 +2,8 @@
 
 > **Dokumen Catatan Konteks Menyeluruh (*Complete Context Dump & Knowledge Base*)**  
 > **Aplikasi**: Bendahara Kelas (Flutter Mobile - Android)  
-> **Terakhir Diperbarui**: 21 September 2026 (v1.0.7+8)  
-> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.0.7 Build 8)  
+> **Terakhir Diperbarui**: 22 September 2026 (v1.1.0+9)  
+> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.1.0 Build 9)  
 > **Lokasi Berkas**: `docs/CONTEXT_DUMP.md`
 
 ---
@@ -69,7 +69,7 @@ bendehara v2/
 │   │   └── widgets/           # FinancialChartCard, TransactionListItem, dsb.
 │   └── main.dart              # Titik masuk aplikasi
 ├── test/                      # 251 unit, widget, service, & e2e automated tests (28 suites)
-└── Bendahara-Kelas-Release.apk # Berkas executable final siap pasang (v1.0.7+8, ~67.9 MB)
+└── Bendahara-Kelas-Release.apk # Berkas executable final siap pasang (v1.1.0+9, ~67.9 MB)
 ```
 
 ---
@@ -458,6 +458,38 @@ Berkas APK Release final telah dikompilasi dengan konfigurasi *release optimizat
 ---
 
 ## 7. Saran & Rekomendasi Pengembangan Masa Depan (Suggestions & Roadmap)
+
+### Rilis v1.1.0+9: Improvement Prioritas Jangka Panjang
+Rilis ini menutup 6 gap fungsional & teknis utama yang diidentifikasi pada audit codebase:
+
+1. **P1: Foto Nota Permanen (Fix Data Loss)** [KRITIS]
+   - Sebelumnya path foto nota menunjuk ke cache sementara `image_picker`, sehingga hilang permanen saat OS membersihkan cache.
+   - Solusi: `ReceiptStorageService` baru — foto disalin ke `app_docs/receipts/YYYY-MM/` dengan nama UUID, path relatif disimpan di DB, dilengkapi garbage collection dan versi sinkron (`resolveAbsolutePathSync`) yang aman dipakai di widget build & test.
+
+2. **P2: Backup Menyertakan Foto Nota**
+   - Berkas cadangan JSON kini menyertakan foto nota (base64) di key `receiptPhotos`.
+   - Restore menulis ulang berkas foto ke penyimpanan aplikasi dan memperbarui referensi path di DB. Pratinjau cadangan menampilkan jumlah foto tersertakan.
+
+3. **P3: Edit & Hapus Transaksi**
+   - Transaksi kini bisa dikoreksi (nominal, kategori, judul, keterangan, tanggal, foto nota) lewat layar baru `EditTransactionScreen` dari dialog detail.
+   - Hapus permanen lewat dialog konfirmasi; `createdAt` tetap dipertahankan sebagai jejak audit.
+
+4. **P4: Rentang Kustom Laporan**
+   - Ditambah opsi rentang ke-5: `Kustom` dengan pemilih tanggal awal-akhir dua tahap.
+   - Grafik analisis keuangan mendukung pengelompokan per bulan dalam rentang kustom (maksimal 24 bucket).
+
+5. **P5: Performa Agregasi SQL**
+   - `watchBalanceStats` kini memakai `SUM` agregat langsung di SQLite (bukan iterasi Dart), tetap responsif walau ribuan transaksi.
+
+6. **P6: Ekspor CSV**
+   - Tombol "Unduh Berkas CSV (Tabel Mentah)" kini aktif di layar Laporan dengan BOM UTF-8 agar Excel Windows membaca karakter Indonesia dengan benar.
+
+7. **Perbaikan Minor & Infrastruktur**
+   - Kolom pengesahan tanda tangan (Bendahara / Ketua Kelas / Wali Kelas / Orang Tua) kini tercetak di PDF sesuai spesifikasi `DESIGN.md`.
+   - `categoriesProvider` kini menggabungkan dua stream kategori secara reaktif (bukan snapshot `.value`).
+   - `EndTermDialog` memperingatkan jika arsip tahun ajaran lama ikut terhapus (karena `clearAllData` menghapus semua tahun).
+   - Pipeline CI GitHub Actions (`.github/workflows/ci.yml`) otomatis menjalankan `flutter analyze` (0 issues) dan `flutter test` (100% pass) di setiap push/PR ke `master`.
+   - Test adversarial `AdvTimestamp 5` diperbarui mencocokkan pesan "berkas foto nota tidak ditemukan" yang lebih informatif (bukan path mentah).
 
 ### Fitur yang Telah Berhasil Diimplementasikan:
 1. **Cadangkan & Pulihkan Data (*Local JSON Backup & Restore*)** [SELESAI di v1.0.2]

@@ -1,13 +1,17 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
+import '../../core/utils/date_formatter.dart';
 import '../../data/database/app_database.dart';
+import '../../domain/services/csv_export_service.dart';
 import '../../domain/services/dues_arrears_service.dart';
 import '../../domain/services/excel_report_service.dart';
 import '../../domain/services/pdf_report_service.dart';
@@ -51,7 +55,48 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
         return '1 Tahun Penuh';
       case ReportDateRange.allTime:
         return 'Semua Tahun (Seluruh Arsip)';
+      case ReportDateRange.custom:
+        final custom = ref.read(customReportRangeProvider);
+        if (custom != null) {
+          return 'Kustom: ${DateFormatter.toHumanDate(custom.$1)} s/d ${DateFormatter.toHumanDate(custom.$2)}';
+        }
+        return 'Rentang Kustom (belum dipilih)';
     }
+  }
+
+  /// Membuka dialog pemilih rentang tanggal kustom.
+  Future<void> _pickCustomDateRange() async {
+    final now = DateTime.now();
+    final initialStart = ref.read(customReportRangeProvider)?.$1 ?? DateTime(now.year, now.month, 1);
+    final initialEnd = ref.read(customReportRangeProvider)?.$2 ?? DateTime(now.year, now.month, now.day);
+
+    final pickedStart = await showDatePicker(
+      context: context,
+      initialDate: initialStart,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+      helpText: 'Tanggal Awal Rentang',
+      locale: const Locale('id', 'ID'),
+    );
+    if (pickedStart == null || !mounted) return;
+
+    var pickedEnd = await showDatePicker(
+      context: context,
+      initialDate: initialEnd.isBefore(pickedStart) ? pickedStart : initialEnd,
+      firstDate: pickedStart,
+      lastDate: DateTime(2100),
+      helpText: 'Tanggal Akhir Rentang',
+      locale: const Locale('id', 'ID'),
+    );
+    if (pickedEnd == null || !mounted) return;
+
+    // Beri waktu minimal 1 hari.
+    if (pickedEnd.isBefore(pickedStart)) {
+      pickedEnd = pickedStart;
+    }
+
+    ref.read(customReportRangeProvider.notifier).setRange(pickedStart, pickedEnd);
+    setState(() {}); // refresh judul rentang
   }
 
   Future<List<StudentArrearsReportItem>> _loadStudentArrears(AcademicYear academicYear) async {
@@ -146,6 +191,50 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(backgroundColor: AppColors.expenseText, content: Text('Galat pratinjau: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGenerating = false);
+    }
+  }
+
+  Future<void> _exportCsv(AcademicYear academicYear) async {
+    setState(() => _isGenerating = true);
+    try {
+      final txItems = ref.read(reportTransactionsProvider).value ?? [];
+
+      final csvContent = CsvExportService.generateCsv(
+        academicYear: academicYear,
+        items: txItems,
+      );
+
+      final cleanName = academicYear.name
+          .replaceAll(RegExp(r'[^\w\s]+'), '')
+          .replaceAll(' ', '_');
+      final now = DateTime.now();
+      final dateStr = '${now.year}${now.month.toString().padLeft(2, '0')}${now.day.toString().padLeft(2, '0')}';
+      final filename = 'Laporan_Kas_${cleanName}_$dateStr.csv';
+      final tempDir = await getTemporaryDirectory();
+      final file = File('${tempDir.path}/$filename');
+      // BOM UTF-8 agar Excel Windows membaca karakter Indonesia dengan benar.
+      await file.writeAsString('\u{FEFF}$csvContent', encoding: const Utf8Codec());
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [
+            XFile(
+              file.path,
+              mimeType: 'text/csv',
+              name: filename,
+            ),
+          ],
+          subject: filename,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppColors.expenseText, content: Text('Galat ekspor CSV: $e')),
         );
       }
     } finally {
@@ -452,9 +541,62 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                       range: ReportDateRange.allTime,
                       selected: selectedRange,
                     ),
+                    const SizedBox(width: 8),
+                    _buildRangeButton(
+                      label: 'Kustom',
+                      range: ReportDateRange.custom,
+                      selected: selectedRange,
+                    ),
                   ],
                 ),
               ),
+
+              // Info rentang kustom terpilih + tombol ubah
+              if (selectedRange == ReportDateRange.custom) ...[
+                const SizedBox(height: 8),
+                Builder(
+                  builder: (context) {
+                    final custom = ref.watch(customReportRangeProvider);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppColors.borderSubtle),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.date_range_rounded, size: 18, color: AppColors.brandPrimary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              custom == null
+                                  ? 'Belum ada rentang dipilih'
+                                  : '${DateFormat('d MMM yyyy', 'id_ID').format(custom.$1)} s/d ${DateFormat('d MMM yyyy', 'id_ID').format(custom.$2)}',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          TextButton(
+                            onPressed: _pickCustomDateRange,
+                            style: TextButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              minimumSize: const Size(0, 36),
+                            ),
+                            child: Text(
+                              custom == null ? 'Pilih Tanggal' : 'Ubah',
+                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
               const SizedBox(height: 14),
 
               // 3. Ringkasan Audit Keuangan
@@ -514,6 +656,7 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                 items: txItems,
                 selectedRange: selectedRange,
                 academicYear: displayYear,
+                customRange: ref.watch(customReportRangeProvider),
               ),
               const SizedBox(height: 16),
 
@@ -550,6 +693,15 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  icon: const Icon(Icons.description_outlined, size: 18),
+                  label: const Text('Unduh Berkas CSV (Tabel Mentah)', style: TextStyle(fontSize: 13)),
+                  onPressed: _isGenerating ? null : () => _exportCsv(displayYear),
+                ),
               ),
               const SizedBox(height: 20),
 
@@ -710,6 +862,9 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
     return InkWell(
       onTap: () {
         ref.read(selectedReportRangeProvider.notifier).setRange(range);
+        if (range == ReportDateRange.custom) {
+          _pickCustomDateRange();
+        }
       },
       borderRadius: BorderRadius.circular(8),
       child: Container(

@@ -3,8 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/database/app_database.dart';
+import '../../data/repositories/transaction_repository.dart';
 import '../providers/app_providers.dart';
 import '../widgets/transaction_list_item.dart';
+import 'edit_transaction_screen.dart';
 
 enum TransactionTypeFilter { all, income, expense }
 
@@ -29,6 +31,42 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
   void dispose() {
     _searchController.dispose();
     super.dispose();
+  }
+
+  Future<void> _openEditTransaction(BuildContext context, TransactionWithCategory item) async {
+    Navigator.of(context).pop(); // tutup dialog detail dulu
+    final didEdit = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => EditTransactionScreen(item: item)),
+    );
+    if (didEdit == true) {
+      ref.invalidate(allTransactionsProvider);
+      if (widget.academicYear != null) {
+        ref.invalidate(allTransactionsByYearProvider(widget.academicYear!.id));
+      }
+      ref.invalidate(balanceStatsProvider);
+      ref.invalidate(recentTransactionsProvider);
+      ref.invalidate(reportTransactionsProvider);
+    }
+  }
+
+  Future<void> _deleteTransaction(TransactionWithCategory item) async {
+    try {
+      await ref.read(transactionRepoProvider).deleteTransaction(item.transaction.id);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.brandPrimary,
+            content: Text('Transaksi "${item.transaction.title}" berhasil dihapus'),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(backgroundColor: AppColors.expenseText, content: Text('Galat menghapus: $e')),
+        );
+      }
+    }
   }
 
   @override
@@ -513,6 +551,8 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
                             return TransactionListItem(
                               key: ValueKey(item.transaction.id),
                               item: item,
+                              onEdit: () => _openEditTransaction(context, item),
+                              onDelete: () => _deleteTransaction(item),
                             );
                           },
                         ),

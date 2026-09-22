@@ -4,21 +4,30 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../data/repositories/transaction_repository.dart';
+import '../../domain/services/receipt_storage_service.dart';
 
 class TransactionListItem extends StatelessWidget {
   final TransactionWithCategory item;
   final VoidCallback? onTap;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
   const TransactionListItem({
     super.key,
     required this.item,
     this.onTap,
+    this.onEdit,
+    this.onDelete,
   });
 
   void _showDetailDialog(BuildContext context) {
     showDialog(
       context: context,
-      builder: (context) => _TransactionDetailDialog(item: item),
+      builder: (context) => _TransactionDetailDialog(
+        item: item,
+        onEdit: onEdit,
+        onDelete: onDelete,
+      ),
     );
   }
 
@@ -231,8 +240,57 @@ class TransactionListItem extends StatelessWidget {
 
 class _TransactionDetailDialog extends StatelessWidget {
   final TransactionWithCategory item;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
 
-  const _TransactionDetailDialog({required this.item});
+  const _TransactionDetailDialog({required this.item, this.onEdit, this.onDelete});
+
+  Future<void> _confirmDelete(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_forever_rounded, color: AppColors.expenseText, size: 26),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Hapus Transaksi Ini?',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Transaksi "${item.transaction.title}" senilai '
+          '${CurrencyFormatter.format(item.transaction.amount)} akan dihapus permanen '
+          'dari buku kas. Saldo kas kelas akan menyesuaikan otomatis.\n\n'
+          'Tindakan ini tidak bisa dibatalkan.',
+          style: const TextStyle(fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.expenseText),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Hapus Permanen'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      onDelete?.call();
+      if (context.mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -247,8 +305,6 @@ class _TransactionDetailDialog extends StatelessWidget {
     final isDateOffset = dateOffset != 0;
     final isBackdated = dateOffset < 0;
     final hasReceipt = tx.receiptImagePath != null && tx.receiptImagePath!.isNotEmpty;
-    final receiptFile = hasReceipt ? File(tx.receiptImagePath!) : null;
-    final fileExists = receiptFile != null && receiptFile.existsSync();
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -408,7 +464,7 @@ class _TransactionDetailDialog extends StatelessWidget {
                     style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
                   ),
                   const Spacer(),
-                  if (fileExists)
+                  if (hasReceipt && ReceiptStorageService.existsSync(tx.receiptImagePath!))
                     const Text(
                       'Ketuk untuk perbesar',
                       style: TextStyle(fontSize: 10.5, color: AppColors.brandPrimary),
@@ -417,37 +473,91 @@ class _TransactionDetailDialog extends StatelessWidget {
               ),
               const SizedBox(height: 8),
 
-              if (fileExists)
-                GestureDetector(
-                  onTap: () {
-                    showDialog(
-                      context: context,
-                      builder: (ctx) => Dialog(
-                        backgroundColor: Colors.transparent,
-                        insetPadding: const EdgeInsets.all(12),
-                        child: Stack(
-                          alignment: Alignment.topRight,
+              if (hasReceipt)
+                Builder(
+                  builder: (context) {
+                    final receiptFile = File(ReceiptStorageService.resolveAbsolutePathSync(tx.receiptImagePath!));
+
+                    if (!receiptFile.existsSync()) {
+                      return Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.slateTag,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
                           children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: InteractiveViewer(
-                                maxScale: 4.0,
-                                child: Image.file(
-                                  receiptFile,
-                                  cacheWidth: 1600,
-                                ),
+                            Icon(Icons.attach_file_rounded, size: 16, color: AppColors.textSecondary),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Berkas foto nota tidak ditemukan di penyimpanan. '
+                                'Foto mungkin tersimpan di cache lama yang sudah dibersihkan.',
+                                style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                               ),
                             ),
-                            Positioned(
-                              top: 8,
-                              right: 8,
-                              child: CircleAvatar(
-                                backgroundColor: Colors.black.withValues(alpha: 0.6),
-                                radius: 18,
-                                child: IconButton(
-                                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
-                                  onPressed: () => Navigator.of(ctx).pop(),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (ctx) => Dialog(
+                            backgroundColor: Colors.transparent,
+                            insetPadding: const EdgeInsets.all(12),
+                            child: Stack(
+                              alignment: Alignment.topRight,
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: InteractiveViewer(
+                                    maxScale: 4.0,
+                                    child: Image.file(
+                                      receiptFile,
+                                      cacheWidth: 1600,
+                                    ),
+                                  ),
                                 ),
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: CircleAvatar(
+                                    backgroundColor: Colors.black.withValues(alpha: 0.6),
+                                    radius: 18,
+                                    child: IconButton(
+                                      icon: const Icon(Icons.close_rounded, color: Colors.white, size: 18),
+                                      onPressed: () => Navigator.of(ctx).pop(),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(10),
+                        child: Stack(
+                          alignment: Alignment.bottomCenter,
+                          children: [
+                            Image.file(
+                              receiptFile,
+                              height: 180,
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              cacheWidth: 800,
+                            ),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              color: Colors.black.withValues(alpha: 0.5),
+                              child: const Text(
+                                'Lihat Foto Layar Penuh',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
                               ),
                             ),
                           ],
@@ -455,51 +565,6 @@ class _TransactionDetailDialog extends StatelessWidget {
                       ),
                     );
                   },
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Stack(
-                      alignment: Alignment.bottomCenter,
-                      children: [
-                        Image.file(
-                          receiptFile,
-                          height: 180,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          cacheWidth: 800,
-                        ),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          color: Colors.black.withValues(alpha: 0.5),
-                          child: const Text(
-                            'Lihat Foto Layar Penuh',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else if (hasReceipt)
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.slateTag,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.attach_file_rounded, size: 16, color: AppColors.textSecondary),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Foto tersimpan: ${tx.receiptImagePath}',
-                          style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
-                        ),
-                      ),
-                    ],
-                  ),
                 )
               else
                 Container(
@@ -520,7 +585,41 @@ class _TransactionDetailDialog extends StatelessWidget {
           ),
         ),
         Padding(
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+            padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandPrimary,
+                      side: const BorderSide(color: AppColors.brandPrimary),
+                      minimumSize: const Size.fromHeight(42),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.edit_outlined, size: 16),
+                    label: const Text('Ubah Transaksi', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    onPressed: onEdit,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.expenseText,
+                      side: const BorderSide(color: AppColors.expenseText),
+                      minimumSize: const Size.fromHeight(42),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 16),
+                    label: const Text('Hapus', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                    onPressed: () => _confirmDelete(context),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton(

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  quality-gate:
+    name: Analyze & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java (Android toolchain)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      - name: Verify formatting (non-fatal report)
+        run: dart format --output=none --set-exit-if-changed . || echo "::warning::Format berbeda dari dart format (tidak memblokir CI)"
+
+      - name: Static analysis (0 issues required)
+        run: flutter analyze
+
+      - name: Run tests (must pass 100%)
+        run: flutter test --reporter expanded

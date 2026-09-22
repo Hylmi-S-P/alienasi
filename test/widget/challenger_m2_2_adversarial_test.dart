@@ -654,7 +654,12 @@ void main() {
       expect(tester.takeException(), isNull);
       expect(find.text('PENGELUARAN KAS'), findsOneWidget);
       expect(find.text('Pencatatan Kas Mundur (Backdated)'), findsOneWidget);
-      expect(find.text('Foto tersimpan: $nonExistentPath'), findsOneWidget);
+      // Berkas foto tidak ada di disk: dialog harus menampilkan pesan
+      // informatif (bukan path mentah yang membingungkan bendahara).
+      expect(
+        find.textContaining('Berkas foto nota tidak ditemukan'),
+        findsOneWidget,
+      );
 
       // Verify close button dismisses cleanly
       await tester.tap(find.text('Tutup'));

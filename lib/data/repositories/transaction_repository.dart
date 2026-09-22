@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:uuid/uuid.dart';
 import '../database/app_database.dart';
+import '../../domain/services/receipt_storage_service.dart';
 
 class TransactionWithCategory {
   final Transaction transaction;
@@ -169,41 +170,36 @@ class TransactionRepository {
     final firstDayOfMonth = DateTime(now.year, now.month, 1);
     final lastDayOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59);
 
+    // Agregasi dihitung langsung oleh SQLite (bukan di Dart) agar tetap
+    // ringan walau sudah menampung ribuan transaksi selama 6 tahun.
+    final totalExpr = _db.transactions.amount.sum(
+      filter: _db.transactions.type.equals('income'),
+    );
+    final totalExpenseExpr = _db.transactions.amount.sum(
+      filter: _db.transactions.type.equals('expense'),
+    );
+    final monthlyIncomeExpr = _db.transactions.amount.sum(
+      filter: _db.transactions.type.equals('income') &
+          _db.transactions.transactionDate.isBiggerOrEqualValue(firstDayOfMonth) &
+          _db.transactions.transactionDate.isSmallerOrEqualValue(lastDayOfMonth),
+    );
+    final monthlyExpenseExpr = _db.transactions.amount.sum(
+      filter: _db.transactions.type.equals('expense') &
+          _db.transactions.transactionDate.isBiggerOrEqualValue(firstDayOfMonth) &
+          _db.transactions.transactionDate.isSmallerOrEqualValue(lastDayOfMonth),
+    );
+
     final query = _db.selectOnly(_db.transactions)
-      ..addColumns([_db.transactions.type, _db.transactions.amount, _db.transactions.transactionDate])
+      ..addColumns([totalExpr, totalExpenseExpr, monthlyIncomeExpr, monthlyExpenseExpr])
       ..where(_db.transactions.academicYearId.equals(academicYearId));
 
-    return query.watch().map((rows) {
-      var totalBalance = 0;
-      var monthlyIncome = 0;
-      var monthlyExpense = 0;
-
-      for (final row in rows) {
-        final type = row.read(_db.transactions.type);
-        final amount = row.read(_db.transactions.amount) ?? 0;
-        final date = row.read(_db.transactions.transactionDate);
-
-        if (type == 'income') {
-          totalBalance += amount;
-        } else {
-          totalBalance -= amount;
-        }
-
-        if (date != null &&
-            date.isAfter(firstDayOfMonth.subtract(const Duration(seconds: 1))) &&
-            date.isBefore(lastDayOfMonth.add(const Duration(seconds: 1)))) {
-          if (type == 'income') {
-            monthlyIncome += amount;
-          } else {
-            monthlyExpense += amount;
-          }
-        }
-      }
-
+    return query.watchSingle().map((row) {
+      final totalIncome = row.read(totalExpr) ?? 0;
+      final totalExpense = row.read(totalExpenseExpr) ?? 0;
       return BalanceStats(
-        totalBalance: totalBalance,
-        monthlyIncome: monthlyIncome,
-        monthlyExpense: monthlyExpense,
+        totalBalance: totalIncome - totalExpense,
+        monthlyIncome: row.read(monthlyIncomeExpr) ?? 0,
+        monthlyExpense: row.read(monthlyExpenseExpr) ?? 0,
       );
     });
   }
@@ -235,6 +231,73 @@ class TransactionRepository {
         createdAt: now,
         updatedAt: now,
       ),
+    );
+  }
+
+  /// Memperbarui transaksi yang sudah ada (koreksi salah input).
+  ///
+  /// Kolom `createdAt` tidak pernah diubah agar riwayat pencatatan tetap
+  /// jujur; hanya `updatedAt` yang diperbarui sebagai jejak audit.
+  Future<void> updateTransaction({
+    required String transactionId,
+    required String categoryId,
+    required String type,
+    required int amount,
+    required String title,
+    String? description,
+    String? receiptImagePath,
+    bool removeReceipt = false,
+    required DateTime transactionDate,
+  }) async {
+    await (_db.update(_db.transactions)..where((t) => t.id.equals(transactionId))).write(
+      TransactionsCompanion(
+        categoryId: Value(categoryId),
+        type: Value(type),
+        amount: Value(amount),
+        title: Value(title),
+        description: Value(description),
+        receiptImagePath: removeReceipt ? const Value(null) : Value(receiptImagePath),
+        transactionDate: Value(transactionDate),
+        updatedAt: Value(DateTime.now()),
+      ),
+    );
+  }
+
+  /// Menghapus transaksi secara permanen beserta berkas foto nota fisiknya.
+  ///
+  /// Mengembalikan objek transaksi yang dihapus (untuk keperluan undo /
+  /// notifikasi), atau null jika transaksi tidak ditemukan.
+  Future<Transaction?> deleteTransaction(String transactionId) async {
+    final tx = await (_db.select(_db.transactions)
+          ..where((t) => t.id.equals(transactionId)))
+        .getSingleOrNull();
+    if (tx == null) return null;
+
+    await (_db.delete(_db.transactions)..where((t) => t.id.equals(transactionId))).go();
+
+    // Bersihkan berkas foto nota yang tidak lagi dirujuk.
+    if (tx.receiptImagePath != null && tx.receiptImagePath!.isNotEmpty) {
+      await ReceiptStorageService.delete(tx.receiptImagePath!);
+    }
+
+    return tx;
+  }
+
+  /// Mengambil satu transaksi lengkap dengan relasi kategori dan tahun ajaran.
+  Future<TransactionWithCategory?> getTransactionById(String transactionId) async {
+    final query = (_db.select(_db.transactions)
+          ..where((t) => t.id.equals(transactionId)))
+        .join([
+      innerJoin(_db.categories, _db.categories.id.equalsExp(_db.transactions.categoryId)),
+      innerJoin(_db.academicYears, _db.academicYears.id.equalsExp(_db.transactions.academicYearId)),
+    ]);
+
+    final rows = await query.get();
+    if (rows.isEmpty) return null;
+    return TransactionWithCategory(
+      transaction: rows.first.readTable(_db.transactions),
+      category: rows.first.readTable(_db.categories),
+      academicYear: rows.first.readTable(_db.academicYears),
     );
   }
 

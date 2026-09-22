@@ -10,12 +10,14 @@ class FinancialChartCard extends StatefulWidget {
   final List<TransactionWithCategory> items;
   final ReportDateRange selectedRange;
   final AcademicYear? academicYear;
+  final (DateTime, DateTime)? customRange;
 
   const FinancialChartCard({
     super.key,
     required this.items,
     required this.selectedRange,
     this.academicYear,
+    this.customRange,
   });
 
   @override
@@ -477,6 +479,38 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
     const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 
     switch (widget.selectedRange) {
+      case ReportDateRange.custom:
+        // Rentang kustom: kelompokkan per bulan kalender dalam rentang.
+        final custom = widget.customRange;
+        final rangeStart = custom?.$1 ?? DateTime(refDate.year, refDate.month, 1);
+        final rangeEnd = custom?.$2 ?? DateTime(refDate.year, refDate.month, DateTime(refDate.year, refDate.month + 1, 0).day, 23, 59, 59);
+
+        // Batasi jumlah bucket maksimum 24 bulan agar chart tetap terbaca.
+        var cursor = DateTime(rangeStart.year, rangeStart.month, 1);
+        var guard = 0;
+        while (!cursor.isAfter(rangeEnd) && guard < 24) {
+          final monthNum = cursor.month;
+          final label = monthNames[(monthNum - 1) % 12];
+          var inc = 0;
+          var exp = 0;
+          for (final it in widget.items) {
+            final dt = it.transaction.transactionDate;
+            if (dt.year == cursor.year && dt.month == monthNum) {
+              if (it.transaction.type == 'income') {
+                inc += it.transaction.amount;
+              } else {
+                exp += it.transaction.amount;
+              }
+            }
+          }
+          buckets.add(_ChartBucket(label: label, income: inc, expense: exp));
+          cursor = DateTime(cursor.year, cursor.month + 1, 1);
+          guard++;
+        }
+        if (buckets.isEmpty) {
+          buckets.add(_ChartBucket(label: monthNames[(rangeStart.month - 1) % 12], income: 0, expense: 0));
+        }
+        break;
       case ReportDateRange.oneMonth:
         final periodType = widget.academicYear?.duesPeriodType ?? 'weekly';
         if (periodType == 'daily') {

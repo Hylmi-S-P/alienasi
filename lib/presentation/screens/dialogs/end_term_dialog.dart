@@ -278,6 +278,60 @@ class _EndTermDialogState extends ConsumerState<EndTermDialog> {
     });
     try {
       final db = ref.read(databaseProvider);
+      if (!mounted) return;
+
+      // Hitung total tahun ajaran yang akan terdampak (termasuk arsip).
+      final allYears = await db.select(db.academicYears).get();
+
+      if (!mounted) return;
+      if (allYears.length > 1) {
+        // Peringatan scope: clearAllData menghapus SEMUA tahun ajaran
+        // termasuk arsip kelas-kelas sebelumnya.
+        final proceed = await showDialog<bool>(
+          context: context,
+          barrierDismissible: false,
+          builder: (dialogContext) => AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: AppColors.warningText, size: 26),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Arsip Kelas Lama Ikut Terhapus',
+                    style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            content: Text(
+              'Terdeteksi ${allYears.length} tahun ajaran tersimpan:\n\n'
+              '${allYears.map((y) => '- ${y.name}').join('\n')}\n\n'
+              'Reset jabatan ini akan menghapus SEMUA tahun ajaran di atas, '
+              'termasuk arsip kelas-kelas sebelumnya, bukan hanya kelas aktif. '
+              'Pastikan Anda sudah mencadangkan arsip yang penting.',
+              style: const TextStyle(fontSize: 13, height: 1.4),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(false),
+                child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.warningText),
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('Tetap Hapus Semua'),
+              ),
+            ],
+          ),
+        );
+
+        if (proceed != true || !mounted) {
+          setState(() => _step = _TermStep.confirmWipe);
+          return;
+        }
+      }
+
       await db.clearAllData();
 
       // Perhatian: JANGAN panggil ref.invalidate(...) di sini!

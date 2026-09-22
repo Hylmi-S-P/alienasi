@@ -188,6 +188,7 @@ class _BackupRestoreDialogState extends ConsumerState<BackupRestoreDialog> {
                       _buildPreviewRow('Jumlah Siswa', '${preview.studentsCount} Siswa'),
                       _buildPreviewRow('Total Transaksi', '${preview.transactionsCount} Transaksi'),
                       _buildPreviewRow('Periode Kas', '${preview.periodsCount} Periode'),
+                      _buildPreviewRow('Foto Nota Tersertakan', '${preview.receiptsCount} Foto'),
                       _buildPreviewRow(
                         'Total Saldo',
                         CurrencyFormatter.format(preview.totalBalance),
