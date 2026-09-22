@@ -64,38 +64,55 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
     }
   }
 
-  /// Membuka dialog pemilih rentang tanggal kustom.
+  /// Membuka pemilih rentang tanggal kustom.
+  ///
+  /// Memakai `showDateRangePicker`: pengguna memilih tanggal awal dan akhir
+  /// dalam SATU kalender, dan seluruh tanggal di antara keduanya otomatis
+  /// ter-highlight sehingga jelas rentang mana yang sedang dipilih.
   Future<void> _pickCustomDateRange() async {
     final now = DateTime.now();
-    final initialStart = ref.read(customReportRangeProvider)?.$1 ?? DateTime(now.year, now.month, 1);
-    final initialEnd = ref.read(customReportRangeProvider)?.$2 ?? DateTime(now.year, now.month, now.day);
+    final existing = ref.read(customReportRangeProvider);
+    final initialStart = existing?.$1 ?? DateTime(now.year, now.month, 1);
+    final initialEnd = existing?.$2 ?? DateTime(now.year, now.month, now.day);
 
-    final pickedStart = await showDatePicker(
+    final picked = await showDateRangePicker(
       context: context,
-      initialDate: initialStart,
       firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
-      helpText: 'Tanggal Awal Rentang',
+      lastDate: DateTime(now.year + 1, 12, 31),
+      initialDateRange: DateTimeRange(
+        start: initialStart,
+        end: initialEnd.isBefore(initialStart) ? initialStart : initialEnd,
+      ),
       locale: const Locale('id', 'ID'),
+      helpText: 'PILIH RENTANG TANGGAL LAPORAN',
+      saveText: 'SIMPAN RENTANG',
+      cancelText: 'BATAL',
+      fieldStartHintText: 'Tanggal awal',
+      fieldEndHintText: 'Tanggal akhir',
+      fieldStartLabelText: 'Mulai',
+      fieldEndLabelText: 'Sampai',
+      errorFormatText: 'Format tanggal tidak valid',
+      errorInvalidText: 'Tanggal di luar rentang yang diizinkan',
+      errorInvalidRangeText: 'Tanggal akhir harus setelah tanggal awal',
+      builder: (context, child) {
+        // Perbesar tinggi dialog agar kalender lebih lega disentuh jari.
+        return Theme(
+          data: Theme.of(context).copyWith(
+            datePickerTheme: DatePickerThemeData(
+              rangeSelectionBackgroundColor: AppColors.brandPrimary.withValues(alpha: 0.15),
+              rangePickerBackgroundColor: Colors.white,
+              rangePickerHeaderBackgroundColor: AppColors.brandPrimary,
+              rangePickerHeaderForegroundColor: Colors.white,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
-    if (pickedStart == null || !mounted) return;
 
-    var pickedEnd = await showDatePicker(
-      context: context,
-      initialDate: initialEnd.isBefore(pickedStart) ? pickedStart : initialEnd,
-      firstDate: pickedStart,
-      lastDate: DateTime(2100),
-      helpText: 'Tanggal Akhir Rentang',
-      locale: const Locale('id', 'ID'),
-    );
-    if (pickedEnd == null || !mounted) return;
+    if (picked == null || !mounted) return;
 
-    // Beri waktu minimal 1 hari.
-    if (pickedEnd.isBefore(pickedStart)) {
-      pickedEnd = pickedStart;
-    }
-
-    ref.read(customReportRangeProvider.notifier).setRange(pickedStart, pickedEnd);
+    ref.read(customReportRangeProvider.notifier).setRange(picked.start, picked.end);
     setState(() {}); // refresh judul rentang
   }
 
@@ -488,46 +505,101 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                 ),
               ),
 
-              // Info rentang kustom terpilih + tombol ubah
+              // Info rentang kustom terpilih: kartu awal - akhir + tombol ubah
               if (selectedRange == ReportDateRange.custom) ...[
                 const SizedBox(height: 8),
                 Builder(
                   builder: (context) {
                     final custom = ref.watch(customReportRangeProvider);
+                    final hasRange = custom != null;
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: AppColors.borderSubtle),
                       ),
-                      child: Row(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Icon(Icons.date_range_rounded, size: 18, color: AppColors.brandPrimary),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              custom == null
-                                  ? 'Belum ada rentang dipilih'
-                                  : '${DateFormat('d MMM yyyy', 'id_ID').format(custom.$1)} s/d ${DateFormat('d MMM yyyy', 'id_ID').format(custom.$2)}',
-                              style: const TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
+                          if (!hasRange)
+                            InkWell(
+                              onTap: _pickCustomDateRange,
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.blueLight,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppColors.brandPrimary.withValues(alpha: 0.3)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.date_range_rounded, size: 18, color: AppColors.brandPrimary),
+                                    const SizedBox(width: 10),
+                                    const Expanded(
+                                      child: Text(
+                                        'Ketuk untuk pilih tanggal awal & akhir laporan',
+                                        style: TextStyle(
+                                          fontSize: 12.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.brandPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    const Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.brandPrimary),
+                                  ],
+                                ),
                               ),
+                            )
+                          else ...[
+                            // Dua kartu tanggal: AWAL - AKHIR dengan highlight hijau
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _buildRangeDateCard(
+                                    label: 'AWAL RENTANG',
+                                    date: DateFormat('d MMM yyyy', 'id_ID').format(custom.$1),
+                                    icon: Icons.play_circle_outline_rounded,
+                                  ),
+                                ),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  child: Icon(
+                                    Icons.arrow_forward_rounded,
+                                    size: 18,
+                                    color: AppColors.brandPrimary,
+                                  ),
+                                ),
+                                Expanded(
+                                  child: _buildRangeDateCard(
+                                    label: 'AKHIR RENTANG',
+                                    date: DateFormat('d MMM yyyy', 'id_ID').format(custom.$2),
+                                    icon: Icons.flag_outlined,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ),
-                          TextButton(
-                            onPressed: _pickCustomDateRange,
-                            style: TextButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(horizontal: 10),
-                              minimumSize: const Size(0, 36),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      foregroundColor: AppColors.brandPrimary,
+                                      side: const BorderSide(color: AppColors.brandPrimary),
+                                      minimumSize: const Size.fromHeight(40),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    icon: const Icon(Icons.edit_calendar_rounded, size: 16),
+                                    label: const Text('Ubah Rentang', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600)),
+                                    onPressed: _pickCustomDateRange,
+                                  ),
+                                ),
+                              ],
                             ),
-                            child: Text(
-                              custom == null ? 'Pilih Tanggal' : 'Ubah',
-                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                            ),
-                          ),
+                          ],
                         ],
                       ),
                     );
@@ -786,6 +858,60 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRangeDateCard({
+    required String label,
+    required String date,
+    required IconData icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.incomeBg,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.incomeText.withValues(alpha: 0.4)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 12, color: AppColors.brandPrimaryDark),
+              const SizedBox(width: 4),
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                      color: AppColors.brandPrimaryDark,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              date,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

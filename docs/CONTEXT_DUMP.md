@@ -2,8 +2,8 @@
 
 > **Dokumen Catatan Konteks Menyeluruh (*Complete Context Dump & Knowledge Base*)**  
 > **Aplikasi**: Bendahara Kelas (Flutter Mobile - Android)  
-> **Terakhir Diperbarui**: 22 September 2026 (v1.1.1+10)  
-> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.1.1 Build 10)  
+> **Terakhir Diperbarui**: 22 September 2026 (v1.1.2+11)  
+> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.1.2 Build 11)  
 > **Lokasi Berkas**: `docs/CONTEXT_DUMP.md`
 
 ---
@@ -458,6 +458,10 @@ Berkas APK Release final telah dikompilasi dengan konfigurasi *release optimizat
 ---
 
 ## 7. Saran & Rekomendasi Pengembangan Masa Depan (Suggestions & Roadmap)
+
+### Rilis v1.1.2+11: Kemudahan Pemilihan Rentang Kustom
+- **Pemilih rentang satu kalender** — Mengganti dua dialog `showDatePicker` terpisah dengan `showDateRangePicker` bawaan Material: pengguna mengetuk tanggal awal lalu tanggal akhir dalam satu kalender, dan seluruh tanggal di antara keduanya otomatis ter-highlight hijau sehingga rentang terlihat jelas.
+- **Kartu rentang tersorot** — Rentang terpilih kini ditampilkan sebagai dua kartu bernama jelas "AWAL RENTANG" dan "AKHIR RENTANG" dengan highlight hijau `incomeBg`, disertai tombol "Ubah Rentang"; saat belum dipilih, muncul kartu ajakan "Ketuk untuk pilih tanggal awal & akhir laporan".
 
 ### Rilis v1.1.1+10: Revisi Berdasarkan Umpan Balik Pengguna
 1. **Hapus seksi tanda tangan PDF** - Kolom pengesahan tanda tangan yang ditambahkan di v1.1.0+9 dihapus kembali sesuai permintaan pengguna (tidak diperlukan).
