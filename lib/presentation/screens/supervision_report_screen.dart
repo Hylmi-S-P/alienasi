@@ -325,12 +325,9 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
   @override
   Widget build(BuildContext context) {
     final activeYearAsync = ref.watch(activeAcademicYearProvider);
-    final allYearsAsync = ref.watch(allAcademicYearsProvider);
     final activeYear = activeYearAsync.value;
-    final allYears = allYearsAsync.value ?? [];
     final selectedRange = ref.watch(selectedReportRangeProvider);
     final txListAsync = ref.watch(reportTransactionsProvider);
-    final selectedYearId = ref.watch(selectedReportYearIdProvider);
 
     if (activeYear == null) {
       return Scaffold(
@@ -354,23 +351,8 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
       );
     }
 
-    // Gabungkan and deduplikasi tahun agar DropdownButton tidak pernah crash
-    final yearsMap = <String, AcademicYear>{};
-    yearsMap[activeYear.id] = activeYear;
-    for (final y in allYears) {
-      yearsMap[y.id] = y;
-    }
-    final validYearsList = yearsMap.values.toList();
-
-    final validSelectedYearId = (selectedYearId != null && validYearsList.any((y) => y.id == selectedYearId))
-        ? selectedYearId
-        : activeYear.id;
-
-    // Historical Year Snapshot: Cari tahun yang dipilih jika memilih arsip tahun lalu
-    final displayYear = validYearsList.firstWhere(
-      (y) => y.id == validSelectedYearId,
-      orElse: () => activeYear,
-    );
+    // Laporan selalu menampilkan tahun ajaran aktif.
+    final displayYear = activeYear;
 
     final txItems = txListAsync.value ?? [];
     int totalIncome = 0;
@@ -462,51 +444,6 @@ class _SupervisionReportScreenState extends ConsumerState<SupervisionReportScree
                 ),
               ),
               const SizedBox(height: 14),
-
-              // Pemilih Periode Kelas (Jika ada lebih dari 1 kelas / tahun ajaran)
-              if (validYearsList.length > 1) ...[
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.borderSubtle),
-                  ),
-                  child: Row(
-                    children: [
-                      const Text(
-                        'Pilih Periode Kelas:',
-                        style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          value: validSelectedYearId,
-                          underline: const SizedBox(),
-                          alignment: AlignmentDirectional.centerEnd,
-                          style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: AppColors.brandPrimary),
-                          items: validYearsList.map((y) {
-                            return DropdownMenuItem(
-                              value: y.id,
-                              child: Text(
-                                y.name,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (newId) {
-                            if (newId != null) {
-                              ref.read(selectedReportYearIdProvider.notifier).setYearId(newId);
-                            }
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
 
               // 2. Bilah Filter Rentang Waktu (Filter Bar)
               const Text(

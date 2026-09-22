@@ -2,8 +2,8 @@
 
 > **Dokumen Catatan Konteks Menyeluruh (*Complete Context Dump & Knowledge Base*)**  
 > **Aplikasi**: Bendahara Kelas (Flutter Mobile - Android)  
-> **Terakhir Diperbarui**: 22 September 2026 (v1.1.0+9)  
-> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.1.0 Build 9)  
+> **Terakhir Diperbarui**: 22 September 2026 (v1.1.1+10)  
+> **Status**: Siap Rilis (Production Ready - Release APK Universal v1.1.1 Build 10)  
 > **Lokasi Berkas**: `docs/CONTEXT_DUMP.md`
 
 ---
@@ -458,6 +458,11 @@ Berkas APK Release final telah dikompilasi dengan konfigurasi *release optimizat
 ---
 
 ## 7. Saran & Rekomendasi Pengembangan Masa Depan (Suggestions & Roadmap)
+
+### Rilis v1.1.1+10: Revisi Berdasarkan Umpan Balik Pengguna
+1. **Hapus seksi tanda tangan PDF** - Kolom pengesahan tanda tangan yang ditambahkan di v1.1.0+9 dihapus kembali sesuai permintaan pengguna (tidak diperlukan).
+2. **Hapus pemilih periode kelas di tab Laporan** - Dropdown "Pilih Periode Kelas" dihapus; layar laporan selalu menampilkan tahun ajaran aktif.
+3. **Fix bug layar gelap rentang kustom** - Penyebab: `showDatePicker` dipanggil dengan `locale id_ID` tetapi `MaterialApp` tidak memiliki `localizationsDelegates`, sehingga dialog gagal dirender dan meninggalkan barrier gelap. Solusi: daftarkan `GlobalMaterialLocalizations` + `flutter_localizations` di pubspec dengan locale default `id_ID`.
 
 ### Rilis v1.1.0+9: Improvement Prioritas Jangka Panjang
 Rilis ini menutup 6 gap fungsional & teknis utama yang diidentifikasi pada audit codebase:

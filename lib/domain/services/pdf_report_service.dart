@@ -522,76 +522,6 @@ class PdfReportService {
   }
 
   @visibleForTesting
-  static List<pw.Widget> buildSignatureSection({
-    required String treasurerName,
-    required String supervisorName,
-    required pw.Font fontRegular,
-    required pw.Font fontBold,
-    required pw.Font fontSemiBold,
-    required DateTime date,
-  }) {
-    pw.Widget signatureColumn(String role, String name) {
-      return pw.Expanded(
-        child: pw.Column(
-          crossAxisAlignment: pw.CrossAxisAlignment.center,
-          children: [
-            pw.Text(
-              role,
-              style: pw.TextStyle(font: fontSemiBold, fontSize: 9, color: PdfColor.fromHex('#0F172A')),
-              textAlign: pw.TextAlign.center,
-            ),
-            pw.SizedBox(height: 34),
-            pw.Text(
-              name,
-              style: pw.TextStyle(font: fontBold, fontSize: 9.5, color: PdfColor.fromHex('#0F172A')),
-              textAlign: pw.TextAlign.center,
-            ),
-            pw.Container(
-              margin: const pw.EdgeInsets.only(top: 2),
-              padding: const pw.EdgeInsets.symmetric(horizontal: 2),
-              decoration: pw.BoxDecoration(
-                border: pw.Border(top: pw.BorderSide(color: PdfColor.fromHex('#94A3B8'), width: 0.7)),
-              ),
-              child: pw.Text(
-                DateFormatter.toShortDate(date),
-                style: pw.TextStyle(font: fontRegular, fontSize: 7.5, color: PdfColor.fromHex('#94A3B8')),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return [
-      pw.SizedBox(height: 20),
-      pw.Divider(thickness: 1, color: PdfColor.fromHex('#CBD5E1')),
-      pw.SizedBox(height: 6),
-      pw.Text(
-        'PENGESAHAN LAPORAN',
-        style: pw.TextStyle(font: fontBold, fontSize: 10, color: PdfColor.fromHex('#1B4332')),
-      ),
-      pw.SizedBox(height: 4),
-      pw.Text(
-        'Laporan ini sah dan disetujui untuk pertanggungjawaban kas kelas.',
-        style: pw.TextStyle(font: fontRegular, fontSize: 8, color: PdfColor.fromHex('#64748B')),
-      ),
-      pw.SizedBox(height: 10),
-      pw.Row(
-        crossAxisAlignment: pw.CrossAxisAlignment.start,
-        children: [
-          signatureColumn('Bendahara Kelas', treasurerName),
-          pw.SizedBox(width: 12),
-          signatureColumn('Ketua Kelas', '( ................ )'),
-          pw.SizedBox(width: 12),
-          signatureColumn('Wali Kelas', '( ................ )'),
-          pw.SizedBox(width: 12),
-          signatureColumn('Orang Tua / Pengawas', supervisorName),
-        ],
-      ),
-    ];
-  }
-
-  @visibleForTesting
   static List<pw.Widget> buildNoteSection({
     required String note,
     required pw.Font fontRegular,
@@ -859,17 +789,7 @@ class PdfReportService {
               date: DateTime.now(),
             ),
 
-          // 5. Kolom Pengesahan & Tanda Tangan (sesuai spesifikasi DESIGN.md)
-          ...buildSignatureSection(
-            treasurerName: academicYear.treasurerName,
-            supervisorName: academicYear.supervisorName,
-            fontRegular: fontRegular,
-            fontBold: fontBold,
-            fontSemiBold: fontSemiBold,
-            date: DateTime.now(),
-          ),
-
-          // 6. Lampiran Bukti Foto Nota (Jika ada transaksi berbukti fisik)
+          // 5. Lampiran Bukti Foto Nota (Jika ada transaksi berbukti fisik)
           if (receiptItems.isNotEmpty) ...[
             pw.SizedBox(height: 18),
             pw.Divider(thickness: 1, color: PdfColor.fromHex('#CBD5E1')),
