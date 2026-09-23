@@ -611,8 +611,10 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
         break;
 
       case ReportDateRange.oneYear:
-        // 12 Bulan kalender berurutan mulai dari bulan awal (Januari) di sebelah kiri
-        // hingga Desember: Jan, Feb, Mar, Apr, Mei, Jun, Jul, Agu, Sep, Okt, Nov, Des
+        // 12 Bulan kalender pada tahun referensi (refDate.year), berurutan
+        // dari Januari ke Desember. Transaksi dari tahun lain diabaikan agar
+        // batang tidak double-count ketika rentang laporan melintasi dua
+        // tahun kalender (misal 15 Jan 2025 s.d. 15 Jan 2026).
         for (var m = 0; m < 12; m++) {
           final targetMonthNum = m + 1;
           final label = monthNames[m];
@@ -621,7 +623,7 @@ class _FinancialChartCardState extends State<FinancialChartCard> {
           var exp = 0;
           for (final it in widget.items) {
             final dt = it.transaction.transactionDate;
-            if (dt.month == targetMonthNum) {
+            if (dt.year == refDate.year && dt.month == targetMonthNum) {
               if (it.transaction.type == 'income') {
                 inc += it.transaction.amount;
               } else {

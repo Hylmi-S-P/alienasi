@@ -221,10 +221,13 @@ void main() {
     test('watchAllYears memancarkan pembaruan saat kelas baru ditambahkan', () async {
       final stream = yearRepo.watchAllYears();
 
+      // Setelah perbaikan A5 (createAcademicYear atomik), operasi
+      // UPDATE isActive=false + INSERT tahun baru dieksekusi dalam satu
+      // transaksi sehingga stream hanya memancarkan nilai per pembuatan
+      // (tidak lagi ada emisi antara yang menyatakan "0 tahun aktif").
       expect(
         stream,
         emitsInOrder([
-          isEmpty,
           hasLength(1),
           hasLength(2),
         ]),
@@ -249,6 +252,10 @@ void main() {
         startDate: DateTime(2027, 7, 1),
         endDate: DateTime(2028, 6, 30),
       );
+
+      // Verifikasi invariant: tepat satu tahun ajaran yang aktif.
+      final active = await yearRepo.getActiveYear();
+      expect(active?.name, 'Kelas 8A');
     });
   });
 

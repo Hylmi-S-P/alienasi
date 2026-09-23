@@ -41,10 +41,6 @@ class AcademicYearRepository {
     const uuid = Uuid();
     final now = DateTime.now();
 
-    // Deactivate previous active years if any
-    await (_db.update(_db.academicYears)..where((t) => t.isActive.equals(true)))
-        .write(const AcademicYearsCompanion(isActive: Value(false)));
-
     final newYear = AcademicYearsCompanion.insert(
       id: uuid.v4(),
       name: name,
@@ -59,10 +55,19 @@ class AcademicYearRepository {
       createdAt: now,
     );
 
-    await _db.into(_db.academicYears).insert(newYear);
+    // Seluruh operasi harus atomik: jika insert gagal (disk penuh, dsb.),
+    // tahun ajaran sebelumnya TIDAK boleh ikut non-aktif — jika tidak,
+    // aplikasi akan terjebak tanpa tahun ajaran aktif sama sekali.
+    final created = await _db.transaction(() async {
+      await (_db.update(_db.academicYears)..where((t) => t.isActive.equals(true)))
+          .write(const AcademicYearsCompanion(isActive: Value(false)));
 
-    final created = await (_db.select(_db.academicYears)..where((t) => t.id.equals(newYear.id.value)))
-        .getSingle();
+      await _db.into(_db.academicYears).insert(newYear);
+
+      return await (_db.select(_db.academicYears)..where((t) => t.id.equals(newYear.id.value)))
+          .getSingle();
+    });
+
     return created;
   }
 

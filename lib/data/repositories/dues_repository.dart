@@ -367,12 +367,26 @@ class DuesRepository {
       return 0;
     }
 
-    // 3. Cari kategori "Uang Kas Rutin"
+    // 3. Cari kategori "Uang Kas Rutin". Jika pengguna telah me-rename
+    // kategori tersebut (misal ke "Kas Rutin"), fallback harus tetap
+    // memilih kategori bertipe 'income' — jangan ambil kategori pertama
+    // tanpa filter, karena bisa jadi kategori pengeluaran.
     final incomeCategory = await (_db.select(_db.categories)
           ..where((t) => t.type.equals('income') & t.name.equals('Uang Kas Rutin')))
         .getSingleOrNull();
 
-    final categoryId = incomeCategory?.id ?? (await _db.select(_db.categories).get()).first.id;
+    final incomeCategories = incomeCategory == null
+        ? await (_db.select(_db.categories)
+              ..where((t) => t.type.equals('income'))
+              ..orderBy([(t) => OrderingTerm(expression: t.createdAt, mode: OrderingMode.asc)]))
+            .get()
+        : const [];
+
+    final categoryId = incomeCategory?.id ??
+        (incomeCategory == null && incomeCategories.isNotEmpty ? incomeCategories.first.id : null);
+    if (categoryId == null) {
+      throw StateError('Tidak ada kategori pemasukan yang tersedia untuk rekonsiliasi kas.');
+    }
 
     const uuid = Uuid();
     final txId = uuid.v4();
