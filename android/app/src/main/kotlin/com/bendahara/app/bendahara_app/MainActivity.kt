@@ -63,6 +63,29 @@ class MainActivity : FlutterActivity() {
                             result.error("VERSION_FAILED", e.message, null)
                         }
                     }
+                    "getHardwareDeviceId" -> {
+                        try {
+                            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                            result.success(androidId ?: "")
+                        } catch (e: Exception) {
+                            result.success("")
+                        }
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "device_identity")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "getHardwareDeviceId" -> {
+                        try {
+                            val androidId = Settings.Secure.getString(contentResolver, Settings.Secure.ANDROID_ID)
+                            result.success(androidId ?: "")
+                        } catch (e: Exception) {
+                            result.success("")
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }

@@ -42,6 +42,19 @@ void main() {
       expect(DeviceIdentityService.cachedDeviceId, 'DEV-TEST-1234');
       expect(await DeviceIdentityService.getDeviceId(), 'DEV-TEST-1234');
     });
+
+    test('deriveDeterministicDeviceId konsisten menghasilkan ID identik dari seed hardware yang sama (persisten melintasi uninstall/reboot)', () {
+      const androidIdSample = '9774d56d682e549c';
+      final id1 = DeviceIdentityService.deriveDeterministicDeviceId(androidIdSample);
+      final id2 = DeviceIdentityService.deriveDeterministicDeviceId(androidIdSample);
+      expect(id1, id2);
+      expect(id1, matches(r'^DEV-[0-9A-Z]{4}-[0-9A-Z]{4}$'));
+
+      // Perangkat lain dengan Android ID berbeda menghasilkan ID berbeda
+      const androidIdOther = '8361abde4921f001';
+      final idOther = DeviceIdentityService.deriveDeterministicDeviceId(androidIdOther);
+      expect(idOther, isNot(equals(id1)));
+    });
   });
 
   group('LicenseEngine - 1-Device Offline Binding', () {

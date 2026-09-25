@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/database/app_database.dart';
 import '../../data/repositories/transaction_repository.dart';
+import '../guards/mutation_guard.dart';
 import '../providers/app_providers.dart';
 import '../widgets/transaction_list_item.dart';
 import 'edit_transaction_screen.dart';
@@ -50,23 +51,38 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
   }
 
   Future<void> _deleteTransaction(TransactionWithCategory item) async {
-    try {
-      await ref.read(transactionRepoProvider).deleteTransaction(item.transaction.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.brandPrimary,
-            content: Text('Transaksi "${item.transaction.title}" berhasil dihapus'),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(backgroundColor: AppColors.expenseText, content: Text('Galat menghapus: $e')),
-        );
-      }
-    }
+    final allowed = await runMutationWithGuard(
+      context,
+      ref,
+      mutationLabel: 'Hapus Transaksi',
+      onAllowed: () async {
+        try {
+          await ref.read(transactionRepoProvider).deleteTransaction(item.transaction.id);
+          ref.invalidate(allTransactionsProvider);
+          if (widget.academicYear != null) {
+            ref.invalidate(allTransactionsByYearProvider(widget.academicYear!.id));
+          }
+          ref.invalidate(balanceStatsProvider);
+          ref.invalidate(recentTransactionsProvider);
+          ref.invalidate(reportTransactionsProvider);
+          ref.invalidate(currentPeriodSummaryProvider);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                backgroundColor: AppColors.brandPrimary,
+                content: Text('Transaksi "${item.transaction.title}" berhasil dihapus'),
+              ),
+            );
+          }
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(backgroundColor: AppColors.expenseText, content: Text('Galat menghapus: $e')),
+            );
+          }
+        }
+      },
+    );
   }
 
   @override

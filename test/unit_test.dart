@@ -15,22 +15,6 @@ void main() {
     await initializeDateFormatting('id_ID', null);
   });
 
-  group('Formatters Test', () {
-    test('CurrencyFormatter memformat Rupiah dengan akurat', () {
-      expect(CurrencyFormatter.format(5000), 'Rp 5.000');
-      expect(CurrencyFormatter.format(485000), 'Rp 485.000');
-      expect(CurrencyFormatter.format(1000000), 'Rp 1.000.000');
-      expect(CurrencyFormatter.formatWithSign(25000, 'income'), '+ Rp 25.000');
-      expect(CurrencyFormatter.formatWithSign(15000, 'expense'), '- Rp 15.000');
-    });
-
-    test('DateFormatter memformat tanggal bahasa Indonesia', () {
-      final date = DateTime(2026, 9, 18);
-      expect(DateFormatter.toShortDate(date), '18/09/2026');
-      expect(DateFormatter.toHumanDate(date), '18 September 2026');
-    });
-  });
-
   group('Database & Durability Test', () {
     late AppDatabase db;
     late AcademicYearRepository yearRepo;

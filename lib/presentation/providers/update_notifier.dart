@@ -270,6 +270,36 @@ class UpdateNotifier extends Notifier<UpdateState> {
     try {
       final result = await _service.checkForUpdate();
       if (!ref.mounted) return;
+
+      if (!Platform.environment.containsKey('FLUTTER_TEST') &&
+          result.isUpdateAvailable &&
+          result.manifest != null) {
+        String? cachedApkPath;
+        try {
+          final directory = await ref.read(apkDownloadDirectoryProvider)();
+          final destination =
+              '${directory.path}/BendaharaAlien-${result.manifest!.latestVersion}.apk';
+          final file = File(destination);
+          if (await file.exists() && (await file.length()) > 0) {
+            cachedApkPath = destination;
+          }
+        } catch (_) {}
+
+        if (cachedApkPath != null && ref.mounted) {
+          state = state.copyWith(
+            status: UpdateStatus.readyToInstall,
+            manifest: result.manifest,
+            currentVersion: effectiveVersion,
+            apkPath: cachedApkPath,
+            downloadProgress: 1.0,
+            errorMessage: null,
+            errorInfo: null,
+            lastCheckedAt: DateTime.now(),
+          );
+          return;
+        }
+      }
+
       state = state.copyWith(
         status: result.isUpdateAvailable
             ? UpdateStatus.available
@@ -358,6 +388,16 @@ class UpdateNotifier extends Notifier<UpdateState> {
     final directory = await ref.read(apkDownloadDirectoryProvider)();
     final destination =
         '${directory.path}/BendaharaAlien-${manifest.latestVersion}.apk';
+
+    final existingFile = File(destination);
+    if (await existingFile.exists() && (await existingFile.length()) > 0) {
+      state = state.copyWith(
+        status: UpdateStatus.readyToInstall,
+        apkPath: destination,
+        downloadProgress: 1.0,
+      );
+      return;
+    }
 
     final download = _service
         .downloadApk(
