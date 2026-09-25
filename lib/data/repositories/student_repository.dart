@@ -48,18 +48,23 @@ class StudentRepository {
             ..where((t) => t.academicYearId.equals(academicYearId)))
           .get();
 
-      for (final p in periods) {
-        await _db.into(_db.duesPayments).insert(
-          DuesPaymentsCompanion.insert(
-            id: uuid.v4(),
-            duesPeriodId: p.id,
-            studentId: studentId,
-            amountPaid: const Value(0),
-            isPaid: const Value(false),
-            paidAt: const Value(null),
-          ),
-          mode: InsertMode.insertOrIgnore,
-        );
+      if (periods.isNotEmpty) {
+        await _db.batch((batch) {
+          for (final p in periods) {
+            batch.insert(
+              _db.duesPayments,
+              DuesPaymentsCompanion.insert(
+                id: uuid.v4(),
+                duesPeriodId: p.id,
+                studentId: studentId,
+                amountPaid: const Value(0),
+                isPaid: const Value(false),
+                paidAt: const Value(null),
+              ),
+              mode: InsertMode.insertOrIgnore,
+            );
+          }
+        });
       }
     });
   }
@@ -197,18 +202,23 @@ class StudentRepository {
             ),
           );
 
-          for (final p in targetPeriods) {
-            await _db.into(_db.duesPayments).insert(
-              DuesPaymentsCompanion.insert(
-                id: uuid.v4(),
-                duesPeriodId: p.id,
-                studentId: studentId,
-                amountPaid: const Value(0),
-                isPaid: const Value(false),
-                paidAt: const Value(null),
-              ),
-              mode: InsertMode.insertOrIgnore,
-            );
+          if (targetPeriods.isNotEmpty) {
+            await _db.batch((batch) {
+              for (final p in targetPeriods) {
+                batch.insert(
+                  _db.duesPayments,
+                  DuesPaymentsCompanion.insert(
+                    id: uuid.v4(),
+                    duesPeriodId: p.id,
+                    studentId: studentId,
+                    amountPaid: const Value(0),
+                    isPaid: const Value(false),
+                    paidAt: const Value(null),
+                  ),
+                  mode: InsertMode.insertOrIgnore,
+                );
+              }
+            });
           }
           copiedCount++;
         }

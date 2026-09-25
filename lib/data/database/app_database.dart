@@ -86,6 +86,7 @@ class AppDatabase extends _$AppDatabase {
       await customStatement('DROP INDEX IF EXISTS idx_dues_periods_year_label;');
       await customStatement('CREATE UNIQUE INDEX IF NOT EXISTS idx_dues_periods_year_label ON dues_periods(academic_year_id, period_label);');
       await customStatement('CREATE INDEX IF NOT EXISTS idx_dues_payments_period_paid ON dues_payments(dues_period_id, is_paid);');
+      await customStatement('CREATE INDEX IF NOT EXISTS idx_dues_payments_student ON dues_payments(student_id);');
       await customStatement('CREATE INDEX IF NOT EXISTS idx_students_year_no ON students(academic_year_id, attendance_number);');
 
       // Seed categories jika masih kosong

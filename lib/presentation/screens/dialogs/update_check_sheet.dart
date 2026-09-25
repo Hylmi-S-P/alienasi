@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 import '../../../core/constants/app_colors.dart';
-import '../../../core/update/apk_installer_service.dart';
 import '../../../core/update/update_error_info.dart';
 import '../../../core/update/update_manifest.dart';
 import '../../providers/update_notifier.dart';
