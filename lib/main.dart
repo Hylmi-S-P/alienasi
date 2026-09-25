@@ -38,7 +38,7 @@ class BendaharaApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Bendahara v2',
+      title: 'Bendahara Alien',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       scrollBehavior: const AppScrollBehavior(),

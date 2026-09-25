@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../domain/services/receipt_storage_service.dart';
+import '../guards/mutation_guard.dart';
 import '../providers/app_providers.dart';
 import 'dialogs/category_management_dialog.dart';
 
@@ -114,6 +115,42 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
       return;
     }
 
+    // Explore-first gating: simpan transaksi adalah aksi mutasi yang
+    // memerlukan lisensi aktif. Bila belum aktif, paywall muncul dan
+    // penyimpanan hanya berlanjut setelah aktivasi berhasil.
+    final allowed = await runMutationWithGuard(
+      context,
+      ref,
+      mutationLabel: 'Menyimpan transaksi membutuhkan lisensi aktif.',
+      onAllowed: () async {
+        await _persistTransaction(
+          academicYearId: academicYearId,
+          effectiveCategoryId: effectiveCategoryId,
+          rawAmount: rawAmount,
+          currentBalance: currentBalance,
+        );
+      },
+    );
+    if (!allowed) return;
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.brandPrimary,
+          content: Text('${_type == 'income' ? 'Pemasukan' : 'Pengeluaran'} berhasil dicatat!'),
+        ),
+      );
+    }
+  }
+
+  /// Menyimpan transaksi ke database dan memicu invalidasi provider yang
+  /// relevan. Dipanggil hanya setelah guard mutasi mengizinkan.
+  Future<void> _persistTransaction({
+    required String academicYearId,
+    required String effectiveCategoryId,
+    required int rawAmount,
+    required int currentBalance,
+  }) async {
     if (_type == 'expense' && rawAmount > currentBalance) {
       final deficit = rawAmount - currentBalance;
       final proceed = await showDialog<bool>(
@@ -187,12 +224,6 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             widget.onBackToDashboard!();
           }
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: AppColors.brandPrimary,
-            content: Text('${_type == 'income' ? 'Pemasukan' : 'Pengeluaran'} berhasil dicatat!'),
-          ),
-        );
       }
     } catch (e) {
       if (mounted) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../guards/mutation_guard.dart';
 import '../../providers/app_providers.dart';
 
 class NewStudentDialog extends ConsumerStatefulWidget {
@@ -63,62 +64,23 @@ class _NewStudentDialogState extends ConsumerState<NewStudentDialog> {
 
     setState(() => _isLoading = true);
     try {
-      final repo = ref.read(studentRepoProvider);
-
-      final isNumberTaken = await repo.isAttendanceNumberTaken(
-        academicYearId: widget.academicYearId,
-        attendanceNumber: number,
+      // Explore-first gating: menambah siswa adalah aksi mutasi.
+      bool persisted = false;
+      final allowed = await runMutationWithGuard(
+        context,
+        ref,
+        mutationLabel: 'Menambah siswa membutuhkan lisensi aktif.',
+        onAllowed: () async {
+          persisted = await _persistStudent();
+        },
       );
-      if (isNumberTaken) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: AppColors.expenseText,
-              content: Text('Nomor absen $number sudah digunakan oleh siswa lain.'),
-            ),
-          );
-        }
+      if (!allowed || !persisted) {
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      final isNameTaken = await repo.isStudentNameTaken(
-        academicYearId: widget.academicYearId,
-        name: _nameController.text.trim(),
-      );
-      if (isNameTaken && mounted) {
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('Nama Siswa Sama', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            content: Text('Siswa dengan nama "${_nameController.text.trim()}" sudah ada di kelas ini. Tetap tambahkan?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandPrimary),
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Tetap Tambahkan'),
-              ),
-            ],
-          ),
-        );
-        if (confirm != true) {
-          setState(() => _isLoading = false);
-          return;
-        }
-      }
-
-      await repo.addStudent(
-        academicYearId: widget.academicYearId,
-        attendanceNumber: number,
-        name: _nameController.text.trim(),
-      );
-
       if (mounted) {
+        setState(() => _isLoading = false);
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -129,13 +91,69 @@ class _NewStudentDialogState extends ConsumerState<NewStudentDialog> {
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(backgroundColor: AppColors.expenseText, content: Text('Galat: $e')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  /// Menambah siswa dan mengembalikan true bila data benar-benar tersimpan.
+  Future<bool> _persistStudent() async {
+    final repo = ref.read(studentRepoProvider);
+
+    final number = int.tryParse(_numberController.text) ?? widget.defaultAttendanceNumber;
+    final isNumberTaken = await repo.isAttendanceNumberTaken(      academicYearId: widget.academicYearId,
+      attendanceNumber: number,
+    );
+    if (isNumberTaken) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.expenseText,
+            content: Text('Nomor absen $number sudah digunakan oleh siswa lain.'),
+          ),
+        );
+      }
+      return false;
+    }
+
+    final isNameTaken = await repo.isStudentNameTaken(
+      academicYearId: widget.academicYearId,
+      name: _nameController.text.trim(),
+    );
+    if (isNameTaken && mounted) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Nama Siswa Sama', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          content: Text('Siswa dengan nama "${_nameController.text.trim()}" sudah ada di kelas ini. Tetap tambahkan?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandPrimary),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Tetap Tambahkan'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) {
+        return false;
+      }
+    }
+
+    await repo.addStudent(
+      academicYearId: widget.academicYearId,
+      attendanceNumber: number,
+      name: _nameController.text.trim(),
+    );
+    return true;
   }
 
   @override

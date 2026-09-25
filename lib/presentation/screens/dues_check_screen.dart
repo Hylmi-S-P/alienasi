@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/database/app_database.dart';
 import '../../data/repositories/dues_repository.dart';
+import '../guards/mutation_guard.dart';
 import '../providers/app_providers.dart';
 import '../widgets/dues_period_calendar_card.dart';
 import 'dialogs/new_student_dialog.dart';
@@ -41,6 +42,23 @@ class _DuesCheckScreenState extends ConsumerState<DuesCheckScreen> {
   ) async {
     if (_selectedStudentIds.isEmpty) return;
 
+    // Explore-first gating: menandai iuran siswa adalah aksi mutasi.
+    final allowed = await runMutationWithGuard(
+      context,
+      ref,
+      mutationLabel: 'Menandai pembayaran kas siswa membutuhkan lisensi aktif.',
+      onAllowed: () async {
+        await _performSaveAndReconcile(period, academicYearId, unreconciledDelta);
+      },
+    );
+    if (!allowed) return;
+  }
+
+  Future<void> _performSaveAndReconcile(
+    DuesPeriod period,
+    String academicYearId,
+    int unreconciledDelta,
+  ) async {
     final selectedCount = _selectedStudentIds.length;
     final selectedAmount = selectedCount * period.targetAmount;
     final totalDeltaToReconcile =
@@ -253,6 +271,24 @@ class _DuesCheckScreenState extends ConsumerState<DuesCheckScreen> {
       return;
     }
 
+    // Explore-first gating: mencatat kas ke buku utama adalah aksi mutasi.
+    final allowed = await runMutationWithGuard(
+      context,
+      ref,
+      mutationLabel: 'Mencatat kas siswa ke buku utama membutuhkan lisensi aktif.',
+      onAllowed: () async {
+        await _performReconcile(period, academicYearId, paidCount, unreconciledDelta);
+      },
+    );
+    if (!allowed) return;
+  }
+
+  Future<void> _performReconcile(
+    DuesPeriod period,
+    String academicYearId,
+    int paidCount,
+    int unreconciledDelta,
+  ) async {
     final isAdditional = period.isReconciled || period.reconciledAmount > 0;
     final confirmed = await showDialog<bool>(
       context: context,

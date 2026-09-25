@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/license/device_identity_service.dart';
 import '../../core/utils/date_formatter.dart';
 import '../../data/database/app_database.dart';
 import '../../data/repositories/academic_year_repository.dart';
+import '../../data/repositories/license_repository.dart';
 import '../../data/repositories/student_repository.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../../data/repositories/dues_repository.dart';
@@ -27,6 +29,14 @@ final transactionRepoProvider = Provider<TransactionRepository>((ref) {
 
 final duesRepoProvider = Provider<DuesRepository>((ref) {
   return DuesRepository(ref.watch(databaseProvider));
+});
+
+final licenseRepoProvider = Provider<LicenseRepository>((ref) {
+  return LicenseRepository(ref.watch(databaseProvider));
+});
+
+final deviceIdProvider = FutureProvider<String>((ref) async {
+  return await DeviceIdentityService.getDeviceId();
 });
 
 // Active Academic Year

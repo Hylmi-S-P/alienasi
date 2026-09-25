@@ -3302,6 +3302,445 @@ class DuesPaymentsCompanion extends UpdateCompanion<DuesPayment> {
   }
 }
 
+class $LicenseStatesTable extends LicenseStates
+    with TableInfo<$LicenseStatesTable, LicenseState> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LicenseStatesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _activationCodeMeta = const VerificationMeta(
+    'activationCode',
+  );
+  @override
+  late final GeneratedColumn<String> activationCode = GeneratedColumn<String>(
+    'activation_code',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _activatedAtMeta = const VerificationMeta(
+    'activatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> activatedAt = GeneratedColumn<DateTime>(
+    'activated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _expiresAtMeta = const VerificationMeta(
+    'expiresAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> expiresAt = GeneratedColumn<DateTime>(
+    'expires_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _lastKnownTimestampMeta =
+      const VerificationMeta('lastKnownTimestamp');
+  @override
+  late final GeneratedColumn<DateTime> lastKnownTimestamp =
+      GeneratedColumn<DateTime>(
+        'last_known_timestamp',
+        aliasedName,
+        false,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: true,
+      );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    activationCode,
+    activatedAt,
+    expiresAt,
+    lastKnownTimestamp,
+    updatedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'license_states';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LicenseState> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('activation_code')) {
+      context.handle(
+        _activationCodeMeta,
+        activationCode.isAcceptableOrUnknown(
+          data['activation_code']!,
+          _activationCodeMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_activationCodeMeta);
+    }
+    if (data.containsKey('activated_at')) {
+      context.handle(
+        _activatedAtMeta,
+        activatedAt.isAcceptableOrUnknown(
+          data['activated_at']!,
+          _activatedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_activatedAtMeta);
+    }
+    if (data.containsKey('expires_at')) {
+      context.handle(
+        _expiresAtMeta,
+        expiresAt.isAcceptableOrUnknown(data['expires_at']!, _expiresAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_expiresAtMeta);
+    }
+    if (data.containsKey('last_known_timestamp')) {
+      context.handle(
+        _lastKnownTimestampMeta,
+        lastKnownTimestamp.isAcceptableOrUnknown(
+          data['last_known_timestamp']!,
+          _lastKnownTimestampMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_lastKnownTimestampMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LicenseState map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LicenseState(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      activationCode: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}activation_code'],
+      )!,
+      activatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}activated_at'],
+      )!,
+      expiresAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}expires_at'],
+      )!,
+      lastKnownTimestamp: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}last_known_timestamp'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LicenseStatesTable createAlias(String alias) {
+    return $LicenseStatesTable(attachedDatabase, alias);
+  }
+}
+
+class LicenseState extends DataClass implements Insertable<LicenseState> {
+  final String id;
+  final String activationCode;
+  final DateTime activatedAt;
+  final DateTime expiresAt;
+
+  /// Timestamp monotonik terakhir yang pernah dilihat aplikasi. Dipakai
+  /// untuk mendeteksi rollback jam sistem.
+  final DateTime lastKnownTimestamp;
+  final DateTime updatedAt;
+  const LicenseState({
+    required this.id,
+    required this.activationCode,
+    required this.activatedAt,
+    required this.expiresAt,
+    required this.lastKnownTimestamp,
+    required this.updatedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['activation_code'] = Variable<String>(activationCode);
+    map['activated_at'] = Variable<DateTime>(activatedAt);
+    map['expires_at'] = Variable<DateTime>(expiresAt);
+    map['last_known_timestamp'] = Variable<DateTime>(lastKnownTimestamp);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    return map;
+  }
+
+  LicenseStatesCompanion toCompanion(bool nullToAbsent) {
+    return LicenseStatesCompanion(
+      id: Value(id),
+      activationCode: Value(activationCode),
+      activatedAt: Value(activatedAt),
+      expiresAt: Value(expiresAt),
+      lastKnownTimestamp: Value(lastKnownTimestamp),
+      updatedAt: Value(updatedAt),
+    );
+  }
+
+  factory LicenseState.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LicenseState(
+      id: serializer.fromJson<String>(json['id']),
+      activationCode: serializer.fromJson<String>(json['activationCode']),
+      activatedAt: serializer.fromJson<DateTime>(json['activatedAt']),
+      expiresAt: serializer.fromJson<DateTime>(json['expiresAt']),
+      lastKnownTimestamp: serializer.fromJson<DateTime>(
+        json['lastKnownTimestamp'],
+      ),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'activationCode': serializer.toJson<String>(activationCode),
+      'activatedAt': serializer.toJson<DateTime>(activatedAt),
+      'expiresAt': serializer.toJson<DateTime>(expiresAt),
+      'lastKnownTimestamp': serializer.toJson<DateTime>(lastKnownTimestamp),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+    };
+  }
+
+  LicenseState copyWith({
+    String? id,
+    String? activationCode,
+    DateTime? activatedAt,
+    DateTime? expiresAt,
+    DateTime? lastKnownTimestamp,
+    DateTime? updatedAt,
+  }) => LicenseState(
+    id: id ?? this.id,
+    activationCode: activationCode ?? this.activationCode,
+    activatedAt: activatedAt ?? this.activatedAt,
+    expiresAt: expiresAt ?? this.expiresAt,
+    lastKnownTimestamp: lastKnownTimestamp ?? this.lastKnownTimestamp,
+    updatedAt: updatedAt ?? this.updatedAt,
+  );
+  LicenseState copyWithCompanion(LicenseStatesCompanion data) {
+    return LicenseState(
+      id: data.id.present ? data.id.value : this.id,
+      activationCode: data.activationCode.present
+          ? data.activationCode.value
+          : this.activationCode,
+      activatedAt: data.activatedAt.present
+          ? data.activatedAt.value
+          : this.activatedAt,
+      expiresAt: data.expiresAt.present ? data.expiresAt.value : this.expiresAt,
+      lastKnownTimestamp: data.lastKnownTimestamp.present
+          ? data.lastKnownTimestamp.value
+          : this.lastKnownTimestamp,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LicenseState(')
+          ..write('id: $id, ')
+          ..write('activationCode: $activationCode, ')
+          ..write('activatedAt: $activatedAt, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('lastKnownTimestamp: $lastKnownTimestamp, ')
+          ..write('updatedAt: $updatedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    activationCode,
+    activatedAt,
+    expiresAt,
+    lastKnownTimestamp,
+    updatedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LicenseState &&
+          other.id == this.id &&
+          other.activationCode == this.activationCode &&
+          other.activatedAt == this.activatedAt &&
+          other.expiresAt == this.expiresAt &&
+          other.lastKnownTimestamp == this.lastKnownTimestamp &&
+          other.updatedAt == this.updatedAt);
+}
+
+class LicenseStatesCompanion extends UpdateCompanion<LicenseState> {
+  final Value<String> id;
+  final Value<String> activationCode;
+  final Value<DateTime> activatedAt;
+  final Value<DateTime> expiresAt;
+  final Value<DateTime> lastKnownTimestamp;
+  final Value<DateTime> updatedAt;
+  final Value<int> rowid;
+  const LicenseStatesCompanion({
+    this.id = const Value.absent(),
+    this.activationCode = const Value.absent(),
+    this.activatedAt = const Value.absent(),
+    this.expiresAt = const Value.absent(),
+    this.lastKnownTimestamp = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LicenseStatesCompanion.insert({
+    required String id,
+    required String activationCode,
+    required DateTime activatedAt,
+    required DateTime expiresAt,
+    required DateTime lastKnownTimestamp,
+    required DateTime updatedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       activationCode = Value(activationCode),
+       activatedAt = Value(activatedAt),
+       expiresAt = Value(expiresAt),
+       lastKnownTimestamp = Value(lastKnownTimestamp),
+       updatedAt = Value(updatedAt);
+  static Insertable<LicenseState> custom({
+    Expression<String>? id,
+    Expression<String>? activationCode,
+    Expression<DateTime>? activatedAt,
+    Expression<DateTime>? expiresAt,
+    Expression<DateTime>? lastKnownTimestamp,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (activationCode != null) 'activation_code': activationCode,
+      if (activatedAt != null) 'activated_at': activatedAt,
+      if (expiresAt != null) 'expires_at': expiresAt,
+      if (lastKnownTimestamp != null)
+        'last_known_timestamp': lastKnownTimestamp,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LicenseStatesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? activationCode,
+    Value<DateTime>? activatedAt,
+    Value<DateTime>? expiresAt,
+    Value<DateTime>? lastKnownTimestamp,
+    Value<DateTime>? updatedAt,
+    Value<int>? rowid,
+  }) {
+    return LicenseStatesCompanion(
+      id: id ?? this.id,
+      activationCode: activationCode ?? this.activationCode,
+      activatedAt: activatedAt ?? this.activatedAt,
+      expiresAt: expiresAt ?? this.expiresAt,
+      lastKnownTimestamp: lastKnownTimestamp ?? this.lastKnownTimestamp,
+      updatedAt: updatedAt ?? this.updatedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (activationCode.present) {
+      map['activation_code'] = Variable<String>(activationCode.value);
+    }
+    if (activatedAt.present) {
+      map['activated_at'] = Variable<DateTime>(activatedAt.value);
+    }
+    if (expiresAt.present) {
+      map['expires_at'] = Variable<DateTime>(expiresAt.value);
+    }
+    if (lastKnownTimestamp.present) {
+      map['last_known_timestamp'] = Variable<DateTime>(
+        lastKnownTimestamp.value,
+      );
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LicenseStatesCompanion(')
+          ..write('id: $id, ')
+          ..write('activationCode: $activationCode, ')
+          ..write('activatedAt: $activatedAt, ')
+          ..write('expiresAt: $expiresAt, ')
+          ..write('lastKnownTimestamp: $lastKnownTimestamp, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3311,6 +3750,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $TransactionsTable transactions = $TransactionsTable(this);
   late final $DuesPeriodsTable duesPeriods = $DuesPeriodsTable(this);
   late final $DuesPaymentsTable duesPayments = $DuesPaymentsTable(this);
+  late final $LicenseStatesTable licenseStates = $LicenseStatesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3322,6 +3762,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     transactions,
     duesPeriods,
     duesPayments,
+    licenseStates,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -6202,6 +6643,240 @@ typedef $$DuesPaymentsTableProcessedTableManager =
       DuesPayment,
       PrefetchHooks Function({bool duesPeriodId, bool studentId})
     >;
+typedef $$LicenseStatesTableCreateCompanionBuilder =
+    LicenseStatesCompanion Function({
+      required String id,
+      required String activationCode,
+      required DateTime activatedAt,
+      required DateTime expiresAt,
+      required DateTime lastKnownTimestamp,
+      required DateTime updatedAt,
+      Value<int> rowid,
+    });
+typedef $$LicenseStatesTableUpdateCompanionBuilder =
+    LicenseStatesCompanion Function({
+      Value<String> id,
+      Value<String> activationCode,
+      Value<DateTime> activatedAt,
+      Value<DateTime> expiresAt,
+      Value<DateTime> lastKnownTimestamp,
+      Value<DateTime> updatedAt,
+      Value<int> rowid,
+    });
+
+class $$LicenseStatesTableFilterComposer
+    extends Composer<_$AppDatabase, $LicenseStatesTable> {
+  $$LicenseStatesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get activationCode => $composableBuilder(
+    column: $table.activationCode,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get activatedAt => $composableBuilder(
+    column: $table.activatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get lastKnownTimestamp => $composableBuilder(
+    column: $table.lastKnownTimestamp,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LicenseStatesTableOrderingComposer
+    extends Composer<_$AppDatabase, $LicenseStatesTable> {
+  $$LicenseStatesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get activationCode => $composableBuilder(
+    column: $table.activationCode,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get activatedAt => $composableBuilder(
+    column: $table.activatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get expiresAt => $composableBuilder(
+    column: $table.expiresAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get lastKnownTimestamp => $composableBuilder(
+    column: $table.lastKnownTimestamp,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LicenseStatesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LicenseStatesTable> {
+  $$LicenseStatesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get activationCode => $composableBuilder(
+    column: $table.activationCode,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get activatedAt => $composableBuilder(
+    column: $table.activatedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get expiresAt =>
+      $composableBuilder(column: $table.expiresAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get lastKnownTimestamp => $composableBuilder(
+    column: $table.lastKnownTimestamp,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+}
+
+class $$LicenseStatesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LicenseStatesTable,
+          LicenseState,
+          $$LicenseStatesTableFilterComposer,
+          $$LicenseStatesTableOrderingComposer,
+          $$LicenseStatesTableAnnotationComposer,
+          $$LicenseStatesTableCreateCompanionBuilder,
+          $$LicenseStatesTableUpdateCompanionBuilder,
+          (
+            LicenseState,
+            BaseReferences<_$AppDatabase, $LicenseStatesTable, LicenseState>,
+          ),
+          LicenseState,
+          PrefetchHooks Function()
+        > {
+  $$LicenseStatesTableTableManager(_$AppDatabase db, $LicenseStatesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LicenseStatesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$LicenseStatesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$LicenseStatesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> activationCode = const Value.absent(),
+                Value<DateTime> activatedAt = const Value.absent(),
+                Value<DateTime> expiresAt = const Value.absent(),
+                Value<DateTime> lastKnownTimestamp = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LicenseStatesCompanion(
+                id: id,
+                activationCode: activationCode,
+                activatedAt: activatedAt,
+                expiresAt: expiresAt,
+                lastKnownTimestamp: lastKnownTimestamp,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String activationCode,
+                required DateTime activatedAt,
+                required DateTime expiresAt,
+                required DateTime lastKnownTimestamp,
+                required DateTime updatedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LicenseStatesCompanion.insert(
+                id: id,
+                activationCode: activationCode,
+                activatedAt: activatedAt,
+                expiresAt: expiresAt,
+                lastKnownTimestamp: lastKnownTimestamp,
+                updatedAt: updatedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$LicenseStatesTable, LicenseState>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $LicenseStatesTable,
+                    LicenseState
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LicenseStatesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LicenseStatesTable,
+      LicenseState,
+      $$LicenseStatesTableFilterComposer,
+      $$LicenseStatesTableOrderingComposer,
+      $$LicenseStatesTableAnnotationComposer,
+      $$LicenseStatesTableCreateCompanionBuilder,
+      $$LicenseStatesTableUpdateCompanionBuilder,
+      (
+        LicenseState,
+        BaseReferences<_$AppDatabase, $LicenseStatesTable, LicenseState>,
+      ),
+      LicenseState,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -6218,4 +6893,6 @@ class $AppDatabaseManager {
       $$DuesPeriodsTableTableManager(_db, _db.duesPeriods);
   $$DuesPaymentsTableTableManager get duesPayments =>
       $$DuesPaymentsTableTableManager(_db, _db.duesPayments);
+  $$LicenseStatesTableTableManager get licenseStates =>
+      $$LicenseStatesTableTableManager(_db, _db.licenseStates);
 }

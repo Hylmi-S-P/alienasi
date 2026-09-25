@@ -9,6 +9,7 @@ import 'tables/categories.dart';
 import 'tables/transactions.dart';
 import 'tables/dues_periods.dart';
 import 'tables/dues_payments.dart';
+import 'tables/license_states.dart';
 
 part 'app_database.g.dart';
 
@@ -19,6 +20,7 @@ part 'app_database.g.dart';
   Transactions,
   DuesPeriods,
   DuesPayments,
+  LicenseStates,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -26,7 +28,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.connection);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   static QueryExecutor _openConnection() {
     return driftDatabase(
@@ -61,6 +63,9 @@ class AppDatabase extends _$AppDatabase {
         // Perbarui nama kategori bawaan lama dari 'Iuran' menjadi 'Kas'
         await customStatement("UPDATE categories SET name = 'Kas Khusus Kegiatan' WHERE name = 'Iuran Khusus Kegiatan';");
         await customStatement("UPDATE categories SET name = 'Uang Kas Rutin' WHERE name = 'Uang Iuran Rutin';");
+      }
+      if (from < 3) {
+        await m.createTable(licenseStates);
       }
     },
     beforeOpen: (details) async {

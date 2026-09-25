@@ -4,10 +4,15 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../providers/app_providers.dart';
+import '../guards/mutation_guard.dart';
+import '../widgets/h1_warning_banner.dart';
 import '../widgets/transaction_list_item.dart';
+import '../widgets/unactivated_banner.dart';
+import '../widgets/update_banner.dart';
 import 'dialogs/backup_restore_dialog.dart';
 import 'dialogs/class_setup_dialog.dart';
 import 'dialogs/end_term_dialog.dart';
+import 'dialogs/update_check_sheet.dart';
 import 'all_transactions_screen.dart';
 import 'transaction_form_screen.dart';
 
@@ -95,7 +100,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ref.invalidate(currentPeriodSummaryProvider);
               },
               child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(parent: ClampingScrollPhysics()),
+                physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,6 +158,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             tooltip: 'Menu Lainnya',
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             onSelected: (value) async {
+                              if (value == 'check_update') {
+                                await UpdateCheckSheet.show(context);
+                                return;
+                              }
                               if (value == 'end_term') {
                                 final didReset = await EndTermDialog.show(context, academicYear: activeYear);
                                 if (didReset == true && context.mounted) {
@@ -162,6 +171,19 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                               }
                             },
                             itemBuilder: (context) => [
+                              const PopupMenuItem(
+                                value: 'check_update',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.system_update_outlined, size: 18, color: AppColors.brandPrimary),
+                                    SizedBox(width: 10),
+                                    Text(
+                                      'Cek Pembaruan Aplikasi',
+                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                    ),
+                                  ],
+                                ),
+                              ),
                               const PopupMenuItem(
                                 value: 'end_term',
                                 child: Row(
@@ -188,6 +210,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 14),
+
+                    // 1a. Banner notifikasi lisensi belum aktif / kedaluwarsa
+                    // dengan tombol WhatsApp langsung ke Admin.
+                    if (UnactivatedBanner.maybeBuild(context, ref)
+                        case final unactivatedBanner?)
+                      ...[
+                        unactivatedBanner,
+                        const SizedBox(height: 14),
+                      ],
+
+                    // 1b. Banner peringatan H-1 (hanya tampil saat sisa
+                    // lisensi <= 24 jam dan belum di-dismiss sesi ini).
+                    if (H1WarningBanner.maybeBuild(context, ref) case final banner?)
+                      ...[
+                        banner,
+                        const SizedBox(height: 14),
+                      ],
+
+                    // 1c. Banner pembaruan aplikasi (tampil hanya saat
+                    // server menyatakan versi lebih baru).
+                    if (UpdateBanner.maybeBuild(context, ref)
+                        case final updateBanner?)
+                      ...[
+                        updateBanner,
+                        const SizedBox(height: 14),
+                      ],
 
                     // 2. Kartu Total Saldo Kas Kelas
                     Container(
@@ -322,12 +370,25 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             bgColor: AppColors.incomeBg,
                             textColor: AppColors.brandPrimary,
                             icon: Icons.add_circle_outline_rounded,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const TransactionFormScreen(initialType: 'income'),
-                                ),
+                            onTap: () async {
+                              final allowed = await runMutationWithGuard(
+                                context,
+                                ref,
+                                mutationLabel:
+                                    'Mencatat transaksi butuh lisensi aktif.',
+                                onAllowed: () async {
+                                  if (!context.mounted) return;
+                                  await Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const TransactionFormScreen(initialType: 'income'),
+                                    ),
+                                  );
+                                },
                               );
+                              // Ketika paywall ditutup tanpa aktivasi,
+                              // navigasi tidak dilakukan sama sekali.
+                              if (!allowed) return;
                             },
                           ),
                         ),
@@ -339,11 +400,21 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             bgColor: AppColors.expenseBgSoft,
                             textColor: AppColors.expenseText,
                             icon: Icons.remove_circle_outline_rounded,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(
-                                  builder: (_) => const TransactionFormScreen(initialType: 'expense'),
-                                ),
+                            onTap: () async {
+                              await runMutationWithGuard(
+                                context,
+                                ref,
+                                mutationLabel:
+                                    'Mencatat transaksi butuh lisensi aktif.',
+                                onAllowed: () async {
+                                  if (!context.mounted) return;
+                                  await Navigator.of(context).push(
+                                    MaterialPageRoute(
+                                      builder: (_) =>
+                                          const TransactionFormScreen(initialType: 'expense'),
+                                    ),
+                                  );
+                                },
                               );
                             },
                           ),

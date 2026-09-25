@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Generator Lisensi Bendahara App</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #38bdf8;
+      --primary-hover: #0ea5e9;
+      --accent: #22c55e;
+      --badge-bg: #0369a1;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      justify-content: center;
+      padding: 24px 16px;
+      min-height: 100vh;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 520px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 24px;
+    }
+
+    .header h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+
+    .header p {
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    }
+
+    .form-group {
+      margin-bottom: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      background: #0f172a;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 0.9375rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input:focus, textarea:focus {
+      border-color: var(--primary);
+    }
+
+    .btn {
+      width: 100%;
+      padding: 12px;
+      background: var(--primary);
+      color: #0f172a;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.9375rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: background 0.2s;
+    }
+
+    .btn:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background: #334155;
+      color: var(--text);
+      margin-top: 10px;
+    }
+
+    .btn-secondary:hover {
+      background: #475569;
+    }
+
+    .btn-success {
+      background: var(--accent);
+      color: #052e16;
+    }
+
+    .token-box {
+      background: #090d16;
+      border: 2px dashed var(--primary);
+      border-radius: 8px;
+      padding: 16px;
+      text-align: center;
+      margin: 16px 0;
+    }
+
+    .token-code {
+      font-family: monospace;
+      font-size: 1.5rem;
+      font-weight: 800;
+      letter-spacing: 0.1em;
+      color: var(--primary);
+      user-select: all;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 12px;
+      font-size: 0.8125rem;
+    }
+
+    .meta-item {
+      background: #0f172a;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+    }
+
+    .meta-item span {
+      display: block;
+      color: var(--text-muted);
+      margin-bottom: 2px;
+    }
+
+    .meta-item strong {
+      color: var(--text);
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: #052e16;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: 600;
+      font-size: 0.875rem;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+
+    .toast.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🔑 Generator Lisensi Bendahara</h1>
+      <p>Alat resmi admin pembuat kode aktivasi 28 hari (HMAC-SHA256)</p>
+    </div>
+
+    <div class="card">
+      <div class="form-group">
+        <label for="buyerName">Nama Pembeli / Kelas (Opsional)</label>
+        <input type="text" id="buyerName" placeholder="Contoh: Bu Siti (Kelas 8B)">
+      </div>
+
+      <div class="form-group">
+        <label for="issueDate">Tanggal Terbit</label>
+        <input type="date" id="issueDate">
+      </div>
+
+      <button class="btn" id="generateBtn" onclick="generateToken()">⚡ Buat Kode Aktivasi (28 Hari)</button>
+
+      <div id="resultSection" style="display: none;">
+        <div class="token-box">
+          <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 4px;">KODE AKTIVASI</div>
+          <div class="token-code" id="tokenCode">BNDH-XXXX-XXXX-XXXX</div>
+        </div>
+
+        <div class="meta-grid">
+          <div class="meta-item">
+            <span>Terbit (WIB)</span>
+            <strong id="metaIssued">-</strong>
+          </div>
+          <div class="meta-item">
+            <span>Kedaluwarsa (WIB)</span>
+            <strong id="metaExpires">-</strong>
+          </div>
+        </div>
+
+        <div class="form-group" style="margin-top: 16px;">
+          <label for="whatsappMsg">Format Pesan WhatsApp Siap Kirim</label>
+          <textarea id="whatsappMsg" rows="6" readonly></textarea>
+        </div>
+
+        <button class="btn btn-success" onclick="copyWhatsAppMessage()">📋 Salin Pesan WhatsApp</button>
+        <button class="btn btn-secondary" onclick="copyTokenOnly()">Hanya Salin Kode</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">Tersalin ke clipboard!</div>
+
+  <script>
+    const TOKEN_PREFIX = 'BNDH';
+    const FORMAT_VERSION = 1;
+    const DEFAULT_SECRET = 'bndh-offline-license-v1::9f3c1a7e5b2d4806a1c9e7f3b5d2084c';
+    const ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+    const EPOCH = new Date(Date.UTC(2024, 0, 1));
+
+    // Set today date as default
+    const today = new Date();
+    document.getElementById('issueDate').value = today.toISOString().split('T')[0];
+
+    async function hmacSha256(secret, message) {
+      const enc = new TextEncoder();
+      const keyData = enc.encode(secret);
+      const msgData = enc.encode(message);
+
+      const cryptoKey = await window.crypto.subtle.importKey(
+        'raw', keyData, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+      );
+
+      const signature = await window.crypto.subtle.sign('HMAC', cryptoKey, msgData);
+      return new Uint8Array(signature);
+    }
+
+    async function generateToken() {
+      const dateVal = document.getElementById('issueDate').value;
+      if (!dateVal) return;
+
+      const [year, month, dayStr] = dateVal.split('-').map(Number);
+      const targetUtc = new Date(Date.UTC(year, month - 1, dayStr));
+
+      const dayNumber = Math.floor((targetUtc - EPOCH) / 86400000);
+      if (dayNumber < 0 || dayNumber > 0xFFFF) {
+        alert('Tanggal terbit di luar rentang yang valid.');
+        return;
+      }
+
+      const payload = (FORMAT_VERSION << 16) | dayNumber;
+      const message = `${TOKEN_PREFIX}|${FORMAT_VERSION}|${payload}`;
+
+      const mac = await hmacSha256(DEFAULT_SECRET, message);
+
+      let tag = 0n;
+      for (let i = 0; i < 5; i++) {
+        tag = (tag << 8n) | BigInt(mac[i]);
+      }
+
+      const value = (BigInt(payload) << 40n) | tag;
+
+      let rest = value;
+      const chars = new Array(12);
+      for (let i = 11; i >= 0; i--) {
+        chars[i] = ALPHABET[Number(rest & 31n)];
+        rest >>= 5n;
+      }
+
+      const token = `${TOKEN_PREFIX}-${chars.slice(0, 4).join('')}-${chars.slice(4, 8).join('')}-${chars.slice(8, 12).join('')}`;
+
+      const expiryUtc = new Date(targetUtc.getTime() + (28 * 86400000));
+      const buyerName = document.getElementById('buyerName').value.trim();
+
+      document.getElementById('tokenCode').innerText = token;
+      document.getElementById('metaIssued').innerText = `${dayStr}/${month}/${year}`;
+      document.getElementById('metaExpires').innerText = `${expiryUtc.getUTCDate()}/${expiryUtc.getUTCMonth() + 1}/${expiryUtc.getUTCFullYear()}`;
+
+      const greeting = buyerName ? `Halo ${buyerName}, terima kasih` : `Halo, terima kasih`;
+      const waText = 
+`${greeting} atas pembayarannya (Rp 25.000).
+
+Berikut kode aktivasi Bendahara App Anda untuk 28 hari ke depan:
+
+🔑 KODE AKTIVASI:
+${token}
+
+Masa aktif: 28 hari (s.d. ${expiryUtc.getUTCDate()}/${expiryUtc.getUTCMonth() + 1}/${expiryUtc.getUTCFullYear()}).
+Silakan buka aplikasi Bendahara dan masukkan kode di atas pada menu aktivasi.
+
+Catatan: H-1 sebelum masa aktif berakhir, aplikasi akan mengingatkan Anda untuk backup data.`;
+
+      document.getElementById('whatsappMsg').value = waText;
+      document.getElementById('resultSection').style.display = 'block';
+    }
+
+    function showToast(msg = 'Tersalin ke clipboard!') {
+      const toast = document.getElementById('toast');
+      toast.innerText = msg;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 2000);
+    }
+
+    function copyWhatsAppMessage() {
+      const text = document.getElementById('whatsappMsg').value;
+      navigator.clipboard.writeText(text).then(() => showToast('Pesan WhatsApp tersalin!'));
+    }
+
+    function copyTokenOnly() {
+      const token = document.getElementById('tokenCode').innerText;
+      navigator.clipboard.writeText(token).then(() => showToast('Kode aktivasi tersalin!'));
+    }
+
+    // Auto-generate on first load
+    generateToken();
+  </script>
+</body>
+</html>

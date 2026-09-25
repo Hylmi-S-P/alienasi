@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:drift/drift.dart' hide isNotNull, isNull;
@@ -11,9 +11,36 @@ import 'package:bendahara_app/data/repositories/dues_repository.dart';
 import 'package:bendahara_app/data/repositories/student_repository.dart';
 import 'package:bendahara_app/data/repositories/transaction_repository.dart';
 import 'package:bendahara_app/presentation/providers/app_providers.dart';
+import 'package:bendahara_app/presentation/providers/subscription_notifier.dart';
 import 'package:bendahara_app/presentation/screens/dues_check_screen.dart';
 import 'package:bendahara_app/presentation/screens/dialogs/new_student_dialog.dart';
 import 'package:uuid/uuid.dart';
+
+/// Notifier uji yang selalu mengembalikan [info] tetap.
+///
+/// Dipakai untuk mensimulasikan status lisensi aktif/nonaktif pada
+/// pengujian widget tanpa menyentuh database lisensi maupun jam sistem.
+class _StubSubscriptionNotifier extends SubscriptionNotifier {
+  _StubSubscriptionNotifier(this.info);
+
+  final SubscriptionInfo info;
+
+  @override
+  Future<SubscriptionInfo> build() async => info;
+}
+
+SubscriptionInfo _activeInfo() {
+  final now = DateTime.utc(2026, 9, 24, 10, 30);
+  return SubscriptionInfo(
+    status: SubscriptionStatus.active,
+    message: 'stub aktif',
+    remaining: const Duration(days: 20),
+    daysRemaining: 20,
+    hoursRemaining: 0,
+    expiresAt: now.add(const Duration(days: 20)),
+    checkedAt: now,
+  );
+}
 
 void main() {
   setUpAll(() async {
@@ -110,6 +137,7 @@ void main() {
           studentRepoProvider.overrideWithValue(studentRepo),
           duesRepoProvider.overrideWithValue(duesRepo),
           transactionRepoProvider.overrideWithValue(txRepo),
+          subscriptionNotifierProvider.overrideWith(() => _StubSubscriptionNotifier(_activeInfo())),
         ],
       );
       addTearDown(() => container.dispose());
@@ -348,6 +376,7 @@ void main() {
           studentRepoProvider.overrideWithValue(studentRepo),
           duesRepoProvider.overrideWithValue(duesRepo),
           transactionRepoProvider.overrideWithValue(txRepo),
+          subscriptionNotifierProvider.overrideWith(() => _StubSubscriptionNotifier(_activeInfo())),
         ],
       );
       addTearDown(() => container.dispose());
@@ -461,6 +490,7 @@ void main() {
           studentRepoProvider.overrideWithValue(studentRepo),
           duesRepoProvider.overrideWithValue(duesRepo),
           transactionRepoProvider.overrideWithValue(txRepo),
+          subscriptionNotifierProvider.overrideWith(() => _StubSubscriptionNotifier(_activeInfo())),
         ],
       );
       addTearDown(() => container.dispose());
@@ -695,6 +725,7 @@ void main() {
           studentRepoProvider.overrideWithValue(studentRepo),
           duesRepoProvider.overrideWithValue(duesRepo),
           transactionRepoProvider.overrideWithValue(txRepo),
+          subscriptionNotifierProvider.overrideWith(() => _StubSubscriptionNotifier(_activeInfo())),
         ],
       );
       addTearDown(() => container.dispose());
@@ -797,6 +828,7 @@ void main() {
           studentRepoProvider.overrideWithValue(studentRepo),
           duesRepoProvider.overrideWithValue(duesRepo),
           transactionRepoProvider.overrideWithValue(txRepo),
+          subscriptionNotifierProvider.overrideWith(() => _StubSubscriptionNotifier(_activeInfo())),
         ],
       );
       addTearDown(() => container.dispose());

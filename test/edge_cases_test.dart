@@ -12,8 +12,33 @@ import 'package:bendahara_app/presentation/widgets/financial_chart_card.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:bendahara_app/presentation/providers/app_providers.dart';
+import 'package:bendahara_app/presentation/providers/subscription_notifier.dart';
 import 'package:bendahara_app/presentation/screens/dues_check_screen.dart';
 import 'package:bendahara_app/presentation/screens/transaction_form_screen.dart';
+
+/// Notifier uji yang selalu mengembalikan [info] tetap. Dipakai untuk
+/// mensimulasikan lisensi aktif pada pengujian widget mutasi.
+class _StubSubscriptionNotifier extends SubscriptionNotifier {
+  _StubSubscriptionNotifier(this.info);
+
+  final SubscriptionInfo info;
+
+  @override
+  Future<SubscriptionInfo> build() async => info;
+}
+
+SubscriptionInfo _activeSubscriptionInfo() {
+  final now = DateTime.utc(2026, 9, 24, 10, 30);
+  return SubscriptionInfo(
+    status: SubscriptionStatus.active,
+    message: 'stub aktif',
+    remaining: const Duration(days: 20),
+    daysRemaining: 20,
+    hoursRemaining: 0,
+    expiresAt: now.add(const Duration(days: 20)),
+    checkedAt: now,
+  );
+}
 
 void main() {
   setUpAll(() async {
@@ -307,6 +332,9 @@ void main() {
         ProviderScope(
           overrides: [
             databaseProvider.overrideWithValue(db),
+            subscriptionNotifierProvider.overrideWith(
+              () => _StubSubscriptionNotifier(_activeSubscriptionInfo()),
+            ),
           ],
           child: const MaterialApp(
             home: TransactionFormScreen(initialType: 'expense'),

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/utils/currency_formatter.dart';
 import '../../../data/database/app_database.dart';
+import '../../guards/mutation_guard.dart';
 import '../../providers/app_providers.dart';
 
 class EditStudentDialog extends ConsumerStatefulWidget {
@@ -76,69 +77,23 @@ class _EditStudentDialogState extends ConsumerState<EditStudentDialog> {
 
     setState(() => _isLoading = true);
     try {
-      final repo = ref.read(studentRepoProvider);
-
-      // 1. Cek bentrok nomor absen dengan siswa lain
-      final isNumberTaken = await repo.isAttendanceNumberTakenExcluding(
-        academicYearId: widget.academicYearId,
-        attendanceNumber: number,
-        excludeStudentId: widget.student.id,
+      // Explore-first gating: mengubah data siswa adalah aksi mutasi.
+      bool persisted = false;
+      final allowed = await runMutationWithGuard(
+        context,
+        ref,
+        mutationLabel: 'Mengubah data siswa membutuhkan lisensi aktif.',
+        onAllowed: () async {
+          persisted = await _persistUpdate(trimmedName);
+        },
       );
-
-      if (isNumberTaken) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              backgroundColor: AppColors.expenseText,
-              content: Text('Nomor absen $number sudah digunakan oleh siswa lain.'),
-            ),
-          );
-        }
+      if (!allowed || !persisted) {
+        if (mounted) setState(() => _isLoading = false);
         return;
       }
 
-      // 2. Cek nama siswa kembar
-      final isNameTaken = await repo.isStudentNameTakenExcluding(
-        academicYearId: widget.academicYearId,
-        name: trimmedName,
-        excludeStudentId: widget.student.id,
-      );
-
-      if (isNameTaken && mounted) {
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            title: const Text('Nama Siswa Sama', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            content: Text('Siswa lain dengan nama "$trimmedName" sudah ada di kelas ini. Tetap simpan perubahan?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandPrimary),
-                onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Tetap Simpan'),
-              ),
-            ],
-          ),
-        );
-        if (confirm != true) {
-          setState(() => _isLoading = false);
-          return;
-        }
-      }
-
-      // 3. Simpan pembaruan
-      await repo.updateStudent(
-        studentId: widget.student.id,
-        attendanceNumber: number,
-        name: trimmedName,
-      );
-
       if (mounted) {
+        setState(() => _isLoading = false);
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -149,13 +104,76 @@ class _EditStudentDialogState extends ConsumerState<EditStudentDialog> {
       }
     } catch (e) {
       if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(backgroundColor: AppColors.expenseText, content: Text('Galat: $e')),
         );
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<bool> _persistUpdate(String trimmedName) async {
+    final repo = ref.read(studentRepoProvider);
+    final number = int.tryParse(_numberController.text) ?? widget.student.attendanceNumber;
+
+    // 1. Cek bentrok nomor absen dengan siswa lain
+    final isNumberTaken = await repo.isAttendanceNumberTakenExcluding(
+      academicYearId: widget.academicYearId,
+      attendanceNumber: number,
+      excludeStudentId: widget.student.id,
+    );
+
+    if (isNumberTaken) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: AppColors.expenseText,
+            content: Text('Nomor absen $number sudah digunakan oleh siswa lain.'),
+          ),
+        );
+      }
+      return false;
+    }
+
+    // 2. Cek nama siswa kembar
+    final isNameTaken = await repo.isStudentNameTakenExcluding(
+      academicYearId: widget.academicYearId,
+      name: trimmedName,
+      excludeStudentId: widget.student.id,
+    );
+
+    if (isNameTaken && mounted) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: const Text('Nama Siswa Sama', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+          content: Text('Siswa lain dengan nama "$trimmedName" sudah ada di kelas ini. Tetap simpan perubahan?'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Batal', style: TextStyle(color: AppColors.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandPrimary),
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Tetap Simpan'),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true) {
+        return false;
+      }
+    }
+
+    // 3. Simpan pembaruan
+    await repo.updateStudent(
+      studentId: widget.student.id,
+      attendanceNumber: number,
+      name: trimmedName,
+    );
+    return true;
   }
 
   Future<void> _handleDelete() async {
@@ -208,9 +226,23 @@ class _EditStudentDialogState extends ConsumerState<EditStudentDialog> {
 
     if (confirm != true || !mounted) return;
 
+    // Explore-first gating: menghapus/menonaktifkan siswa adalah mutasi.
+    final allowed = await runMutationWithGuard(
+      context,
+      ref,
+      mutationLabel: 'Menghapus siswa membutuhkan lisensi aktif.',
+      onAllowed: () async {
+        await _performDelete();
+      },
+    );
+    if (!allowed) return;
+  }
+
+  Future<void> _performDelete() async {
     setState(() => _isLoading = true);
     try {
-      final wasHardDeleted = await repo.deleteStudent(studentId: widget.student.id);
+      final wasHardDeleted =
+          await ref.read(studentRepoProvider).deleteStudent(studentId: widget.student.id);
       widget.onDeleted?.call();
 
       if (mounted) {
