@@ -31,12 +31,36 @@ class MainActivity : FlutterActivity() {
                             result.error("INSTALL_FAILED", e.message, null)
                         }
                     }
+                    "canRequestPackageInstalls" -> {
+                        val canInstall = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            packageManager.canRequestPackageInstalls()
+                        } else {
+                            true
+                        }
+                        result.success(canInstall)
+                    }
                     "openUnknownAppsSettings" -> {
                         try {
                             openUnknownAppsSettings()
                             result.success(true)
                         } catch (e: Exception) {
                             result.error("SETTINGS_FAILED", e.message, null)
+                        }
+                    }
+                    "getAppVersion" -> {
+                        try {
+                            val pInfo = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                packageManager.getPackageInfo(
+                                    packageName,
+                                    android.content.pm.PackageManager.PackageInfoFlags.of(0)
+                                )
+                            } else {
+                                @Suppress("DEPRECATION")
+                                packageManager.getPackageInfo(packageName, 0)
+                            }
+                            result.success(pInfo.versionName)
+                        } catch (e: Exception) {
+                            result.error("VERSION_FAILED", e.message, null)
                         }
                     }
                     else -> result.notImplemented()
@@ -48,6 +72,11 @@ class MainActivity : FlutterActivity() {
         val file = File(filePath)
         if (!file.exists()) {
             throw IllegalArgumentException("Berkas APK tidak ditemukan: $filePath")
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !packageManager.canRequestPackageInstalls()) {
+            openUnknownAppsSettings()
+            return false
         }
 
         val uri = FileProvider.getUriForFile(

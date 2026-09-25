@@ -42,13 +42,16 @@ final customManifestUrlProvider =
   CustomManifestUrlNotifier.new,
 );
 
+/// Versi default aplikasi jika tidak terdeteksi dari native build.
+const String defaultAppVersion = '1.0.2';
+
 /// Provider konfigurasi; dioverride di pengujian untuk mengarahkan ke
 /// fetcher stub tanpa jaringan.
 final updateConfigProvider = Provider<UpdateConfig>((ref) {
   final customUrl = ref.watch(customManifestUrlProvider);
   return UpdateConfig(
     manifestUrl: customUrl ?? defaultProductionManifestUrl,
-    currentAppVersion: '1.0.1',
+    currentAppVersion: defaultAppVersion,
   );
 });
 
@@ -155,6 +158,7 @@ class UpdateState {
   UpdateState copyWith({
     UpdateStatus? status,
     UpdateManifest? manifest,
+    String? currentVersion,
     double? downloadProgress,
     int? receivedBytes,
     int? totalBytes,
@@ -166,7 +170,7 @@ class UpdateState {
     return UpdateState(
       status: status ?? this.status,
       manifest: manifest ?? this.manifest,
-      currentVersion: currentVersion,
+      currentVersion: currentVersion ?? this.currentVersion,
       downloadProgress: downloadProgress ?? this.downloadProgress,
       receivedBytes: receivedBytes ?? this.receivedBytes,
       totalBytes: totalBytes ?? this.totalBytes,
@@ -211,10 +215,21 @@ class UpdateNotifier extends Notifier<UpdateState> {
   @override
   UpdateState build() {
     final config = ref.watch(updateConfigProvider);
+    _resolveNativeAppVersion();
     return UpdateState(
       status: UpdateStatus.idle,
       currentVersion: config.currentAppVersion,
     );
+  }
+
+  Future<void> _resolveNativeAppVersion() async {
+    final nativeVersion = await ApkInstallerService.getAppVersion();
+    if (nativeVersion != null &&
+        nativeVersion.isNotEmpty &&
+        nativeVersion != state.currentVersion &&
+        ref.mounted) {
+      state = state.copyWith(currentVersion: nativeVersion);
+    }
   }
 
   UpdateService get _service => UpdateService(
@@ -224,8 +239,14 @@ class UpdateNotifier extends Notifier<UpdateState> {
 
   /// Memeriksa manifest server dan memperbarui status.
   Future<void> checkForUpdate() async {
+    final nativeVersion = await ApkInstallerService.getAppVersion();
+    final effectiveVersion = (nativeVersion != null && nativeVersion.isNotEmpty)
+        ? nativeVersion
+        : state.currentVersion;
+
     state = state.copyWith(
       status: UpdateStatus.checking,
+      currentVersion: effectiveVersion,
       errorMessage: null,
       errorInfo: null,
     );
@@ -238,6 +259,7 @@ class UpdateNotifier extends Notifier<UpdateState> {
             ? UpdateStatus.available
             : UpdateStatus.upToDate,
         manifest: result.manifest,
+        currentVersion: effectiveVersion,
         apkPath: null,
         downloadProgress: null,
         errorMessage: null,

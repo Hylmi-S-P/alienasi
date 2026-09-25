@@ -648,7 +648,7 @@ class _DownloadingBody extends StatelessWidget {
 }
 
 /// 3. SUCCESS STATE: Ketika berkas berhasil diunduh dan siap dipasang.
-class _ReadyToInstallBody extends StatelessWidget {
+class _ReadyToInstallBody extends StatefulWidget {
   const _ReadyToInstallBody({
     required this.state,
     required this.onInstall,
@@ -658,10 +658,51 @@ class _ReadyToInstallBody extends StatelessWidget {
   final Future<bool> Function() onInstall;
 
   @override
+  State<_ReadyToInstallBody> createState() => _ReadyToInstallBodyState();
+}
+
+class _ReadyToInstallBodyState extends State<_ReadyToInstallBody>
+    with WidgetsBindingObserver {
+  bool _canInstall = true;
+  bool _isCheckingPermission = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _checkPermission();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState lifecycleState) {
+    if (lifecycleState == AppLifecycleState.resumed) {
+      _checkPermission();
+    }
+  }
+
+  Future<void> _checkPermission() async {
+    if (_isCheckingPermission) return;
+    _isCheckingPermission = true;
+    final can = await ApkInstallerService.canRequestPackageInstalls();
+    if (mounted) {
+      setState(() {
+        _canInstall = can;
+        _isCheckingPermission = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final manifest = state.manifest;
-    final version = manifest?.latestVersion ?? state.currentVersion;
-    final apkPath = state.apkPath ?? '';
+    final manifest = widget.state.manifest;
+    final version = manifest?.latestVersion ?? widget.state.currentVersion;
+    final apkPath = widget.state.apkPath ?? '';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -727,7 +768,7 @@ class _ReadyToInstallBody extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
         if (apkPath.isNotEmpty) ...[
           Container(
             width: double.infinity,
@@ -758,41 +799,170 @@ class _ReadyToInstallBody extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton.icon(
-            key: const ValueKey('update_install_btn'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.brandPrimary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+
+        // Petunjuk izin install from this source
+        if (!_canInstall) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFFBEB), // Amber 50
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFFDE68A)), // Amber 200
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFFEF3C7),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.admin_panel_settings_rounded,
+                        color: Color(0xFFB45309), // Amber 700
+                        size: 20,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Expanded(
+                      child: Text(
+                        'Langkah Wajib: Izinkan Sumber Ini',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFF92400E),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Agar pembaruan tidak macet / tertahan oleh Android, aktifkan izin pemasangan dengan 3 langkah berikut:',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Color(0xFF78350F),
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _buildStep(
+                  '1',
+                  'Tekan tombol oranye "Buka Pengaturan Izin" di bawah.',
+                ),
+                const SizedBox(height: 6),
+                _buildStep(
+                  '2',
+                  'Aktifkan saklar "Izinkan dari sumber ini" (Allow from this source).',
+                ),
+                const SizedBox(height: 6),
+                _buildStep(
+                  '3',
+                  'Kembali ke aplikasi ini, lalu tekan "Pasang Pembaruan Sekarang".',
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 46,
+            child: ElevatedButton.icon(
+              key: const ValueKey('open_install_permission_btn'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD97706), // Amber 600
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
-              textStyle: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+              icon: const Icon(Icons.settings_suggest_rounded, size: 18),
+              label: const Text('1. Buka Pengaturan Izin'),
+              onPressed: () => ApkInstallerService.openUnknownAppsSettings(),
+            ),
+          ),
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            height: 44,
+            child: OutlinedButton.icon(
+              key: const ValueKey('update_install_btn'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.brandPrimary,
+                side: const BorderSide(color: AppColors.brandPrimary),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              icon: const Icon(Icons.install_mobile_rounded, size: 18),
+              label: const Text('2. Pasang Pembaruan Sekarang'),
+              onPressed: () => _handleInstall(context),
+            ),
+          ),
+        ] else ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: AppColors.incomeBg,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: AppColors.incomeText.withValues(alpha: 0.2),
               ),
             ),
-            icon: const Icon(Icons.install_mobile_rounded, size: 18),
-            label: const Text('Pasang Pembaruan Sekarang'),
-            onPressed: () async {
-              final launched = await onInstall();
-              if (!context.mounted) return;
-              if (!launched) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    backgroundColor: AppColors.expenseText,
-                    content: Text(
-                      'Gagal membuka installer. Buka pengaturan izin '
-                      'atau pasang berkas APK secara manual.',
+            child: const Row(
+              children: [
+                Icon(Icons.check_circle_rounded,
+                    color: AppColors.incomeText, size: 18),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Izin pemasangan dari sumber ini sudah aktif.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.incomeText,
                     ),
                   ),
-                );
-              }
-            },
+                ),
+              ],
+            ),
           ),
-        ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton.icon(
+              key: const ValueKey('update_install_btn'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.brandPrimary,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              icon: const Icon(Icons.install_mobile_rounded, size: 18),
+              label: const Text('Pasang Pembaruan Sekarang'),
+              onPressed: () => _handleInstall(context),
+            ),
+          ),
+        ],
         const SizedBox(height: 8),
         Row(
           children: [
@@ -801,7 +971,7 @@ class _ReadyToInstallBody extends StatelessWidget {
             const SizedBox(width: 6),
             const Expanded(
               child: Text(
-                'Jika Android meminta izin sumber tak dikenal, aktifkan izin pada pengaturan.',
+                'Jika installer tidak terbuka, Anda dapat mengaktifkan izin secara manual di pengaturan.',
                 style: TextStyle(fontSize: 11, color: AppColors.textMuted),
               ),
             ),
@@ -817,6 +987,60 @@ class _ReadyToInstallBody extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Widget _buildStep(String number, String text) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 18,
+          height: 18,
+          alignment: Alignment.center,
+          decoration: const BoxDecoration(
+            color: Color(0xFFD97706),
+            shape: BoxShape.circle,
+          ),
+          child: Text(
+            number,
+            style: const TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+              color: Colors.white,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 11.5,
+              color: Color(0xFF78350F),
+              fontWeight: FontWeight.w500,
+              height: 1.35,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _handleInstall(BuildContext context) async {
+    final launched = await widget.onInstall();
+    if (!context.mounted) return;
+    if (!launched) {
+      await _checkPermission();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.expenseText,
+          content: Text(
+            'Gagal membuka installer. Pastikan izin "Sumber Ini" sudah diaktifkan.',
+          ),
+        ),
+      );
+    }
   }
 }
 
