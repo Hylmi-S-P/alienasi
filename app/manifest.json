@@ -1,6 +1,6 @@
 {
-  "latest_version": "1.0.2",
-  "release_notes": "Pembaruan Versi 1.0.2:\n• Peningkatan performa rendering 60fps & kehalusan animasi.\n• Penambahan notifikasi aktivasi langsung ke WhatsApp Admin di Dashboard.\n• Perbaikan stabilitas sistem lisensi offline 1-device.\n• Mekanisme pembaruan aplikasi in-app.",
-  "apk_url": "https://github.com/Hylmi-S-P/alienasi/releases/download/v1.0.2/Bendahara-Alien-v1.0.2.apk",
+  "latest_version": "1.0.3",
+  "release_notes": "Pembaruan Versi 1.0.3:\n• Penguncian tombol pasang hingga izin sumber tidak dikenal aktif.\n• Deteksi otomatis aktivasi izin saat kembali dari pengaturan Android.\n• Optimasi indeks database (pencarian & kelola data siswa lebih cepat).\n• Akselerasi batch transaksi kas awal siswa.",
+  "apk_url": "https://github.com/Hylmi-S-P/alienasi/releases/download/v1.0.3/Bendahara-Alien-v1.0.3.apk",
   "min_required_version": "1.0.0"
 }

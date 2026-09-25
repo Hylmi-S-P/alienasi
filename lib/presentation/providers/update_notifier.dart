@@ -43,7 +43,7 @@ final customManifestUrlProvider =
 );
 
 /// Versi default aplikasi jika tidak terdeteksi dari native build.
-const String defaultAppVersion = '1.0.2';
+const String defaultAppVersion = '1.0.3';
 
 /// Provider konfigurasi; dioverride di pengujian untuk mengarahkan ke
 /// fetcher stub tanpa jaringan.
