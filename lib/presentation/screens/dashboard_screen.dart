@@ -4,6 +4,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../data/repositories/transaction_repository.dart';
 import '../providers/app_providers.dart';
+import '../providers/update_notifier.dart';
 import '../guards/mutation_guard.dart';
 import '../widgets/h1_warning_banner.dart';
 import '../widgets/transaction_list_item.dart';
@@ -27,6 +28,16 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _setupDialogShown = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(updateNotifierProvider.notifier).checkForUpdateSilently();
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,6 +109,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 ref.invalidate(balanceStatsProvider);
                 ref.invalidate(recentTransactionsProvider);
                 ref.invalidate(currentPeriodSummaryProvider);
+                ref.read(updateNotifierProvider.notifier).checkForUpdateSilently();
               },
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),

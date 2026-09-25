@@ -283,6 +283,51 @@ class UpdateNotifier extends Notifier<UpdateState> {
     }
   }
 
+  /// Memeriksa pembaruan di latar belakang secara senyap tanpa menampilkan dialog.
+  ///
+  /// Dipanggil otomatis saat Dashboard pertama kali dibuka atau di-refresh.
+  /// Jika ada versi baru, status diubah menjadi [UpdateStatus.available]
+  /// sehingga [UpdateBanner] langsung muncul di bagian atas Dashboard.
+  Future<void> checkForUpdateSilently() async {
+    if (Platform.environment.containsKey('FLUTTER_TEST')) {
+      final config = ref.read(updateConfigProvider);
+      if (config.manifestUrl == defaultProductionManifestUrl) {
+        return;
+      }
+    }
+
+    final nativeVersion = await ApkInstallerService.getAppVersion();
+    final effectiveVersion = (nativeVersion != null && nativeVersion.isNotEmpty)
+        ? nativeVersion
+        : state.currentVersion;
+
+    try {
+      final service = UpdateService(
+        fetcher: ref.read(updateManifestFetcherProvider),
+        currentAppVersion: effectiveVersion,
+      );
+      final result = await service.checkForUpdate();
+      if (!ref.mounted) return;
+      if (result.isUpdateAvailable) {
+        state = state.copyWith(
+          status: UpdateStatus.available,
+          manifest: result.manifest,
+          currentVersion: effectiveVersion,
+          lastCheckedAt: DateTime.now(),
+        );
+      } else {
+        state = state.copyWith(
+          status: UpdateStatus.upToDate,
+          manifest: result.manifest,
+          currentVersion: effectiveVersion,
+          lastCheckedAt: DateTime.now(),
+        );
+      }
+    } catch (_) {
+      // Tidak mengubah status ke gagal agar tidak mengganggu pengguna di latar belakang.
+    }
+  }
+
   /// Mengunduh APK dari manifest aktif.
   ///
   /// Bila unduhan sedang berjalan, panggilan berikutnya mengikuti unduhan
