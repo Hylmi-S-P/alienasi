@@ -13,6 +13,7 @@ import '../widgets/update_banner.dart';
 import 'dialogs/backup_restore_dialog.dart';
 import 'dialogs/class_setup_dialog.dart';
 import 'dialogs/end_term_dialog.dart';
+import 'dialogs/subscription_info_sheet.dart';
 import 'dialogs/update_check_sheet.dart';
 import 'all_transactions_screen.dart';
 import 'transaction_form_screen.dart';
@@ -170,6 +171,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             tooltip: 'Menu Lainnya',
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                             onSelected: (value) async {
+                              if (value == 'subscription_info') {
+                                await SubscriptionInfoSheet.show(context);
+                                return;
+                              }
                               if (value == 'check_update') {
                                 await UpdateCheckSheet.show(context);
                                 return;
@@ -184,14 +189,31 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                             },
                             itemBuilder: (context) => [
                               const PopupMenuItem(
+                                value: 'subscription_info',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.card_membership_rounded, size: 18, color: AppColors.brandPrimary),
+                                    SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        'Informasi Langganan',
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
                                 value: 'check_update',
                                 child: Row(
                                   children: [
                                     Icon(Icons.system_update_outlined, size: 18, color: AppColors.brandPrimary),
                                     SizedBox(width: 10),
-                                    Text(
-                                      'Cek Pembaruan Aplikasi',
-                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                    Expanded(
+                                      child: Text(
+                                        'Cek Pembaruan Aplikasi',
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -202,9 +224,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                                   children: [
                                     Icon(Icons.flag_rounded, size: 18, color: AppColors.expenseText),
                                     SizedBox(width: 10),
-                                    Text(
-                                      'Akhiri Jabatan Bendahara',
-                                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                    Expanded(
+                                      child: Text(
+                                        'Akhiri Jabatan Bendahara',
+                                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
                                     ),
                                   ],
                                 ),
