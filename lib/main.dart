@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/license/device_identity_service.dart';
 import 'domain/services/receipt_storage_service.dart';
 import 'presentation/screens/main_scaffold.dart';
 import 'presentation/theme/app_theme.dart';
@@ -11,6 +12,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('id_ID', null);
   await ReceiptStorageService.warmUpCache();
+  await DeviceIdentityService.getDeviceId();
   runApp(
     const ProviderScope(
       child: BendaharaApp(),

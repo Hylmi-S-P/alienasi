@@ -15,7 +15,7 @@ import '../screens/dialogs/paywall_sheet.dart';
 ///   1. "Aktivasi" -> membuka dialog PaywallSheet untuk input token.
 ///   2. "Beli via WhatsApp" -> membuka chat WhatsApp ke admin
 ///      dengan template pesan otomatis yang sudah memuat ID Perangkat pengguna.
-class UnactivatedBanner extends ConsumerWidget {
+class UnactivatedBanner extends ConsumerStatefulWidget {
   const UnactivatedBanner({
     super.key,
     required this.info,
@@ -25,6 +25,38 @@ class UnactivatedBanner extends ConsumerWidget {
 
   static const String _adminPhoneRaw = '081234567890';
   static const String _adminPhoneIntl = '6281234567890';
+
+  /// Pintasan publik untuk membuka WhatsApp pemesanan lisensi dengan menyertakan ID Perangkat.
+  static Future<void> launchWhatsApp(
+    BuildContext context, [
+    String? deviceId,
+  ]) async {
+    final effectiveDeviceId = (deviceId != null &&
+            deviceId != '...' &&
+            deviceId.isNotEmpty)
+        ? deviceId
+        : await DeviceIdentityService.getDeviceId();
+
+    final message =
+        'Halo Admin Bendahara Alien, saya ingin membeli kode aktivasi lisensi 28 hari (Rp 25.000) untuk ID Perangkat: $effectiveDeviceId';
+    final urlString =
+        'https://wa.me/$_adminPhoneIntl?text=${Uri.encodeComponent(message)}';
+    final uri = Uri.parse(urlString);
+
+    try {
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+      if (!launched && context.mounted) {
+        _showFallbackDialog(context, message, effectiveDeviceId);
+      }
+    } catch (_) {
+      if (context.mounted) {
+        _showFallbackDialog(context, message, effectiveDeviceId);
+      }
+    }
+  }
 
   /// Mengembalikan widget banner bila status lisensi belum aktif atau expired;
   /// null bila lisensi sedang aktif penuh sehingga slot tidak memakan ruang.
@@ -39,31 +71,6 @@ class UnactivatedBanner extends ConsumerWidget {
       );
     }
     return null;
-  }
-
-  static Future<void> _launchWhatsApp(
-    BuildContext context,
-    String deviceId,
-  ) async {
-    final message =
-        'Halo Admin Bendahara Alien, saya ingin membeli kode aktivasi lisensi 28 hari (Rp 25.000) untuk ID Perangkat: $deviceId';
-    final urlString =
-        'https://wa.me/$_adminPhoneIntl?text=${Uri.encodeComponent(message)}';
-    final uri = Uri.parse(urlString);
-
-    try {
-      final launched = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-      );
-      if (!launched && context.mounted) {
-        _showFallbackDialog(context, message, deviceId);
-      }
-    } catch (_) {
-      if (context.mounted) {
-        _showFallbackDialog(context, message, deviceId);
-      }
-    }
   }
 
   static void _showFallbackDialog(
@@ -127,18 +134,37 @@ class UnactivatedBanner extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isExpired = info.status == SubscriptionStatus.expired;
+  ConsumerState<UnactivatedBanner> createState() => _UnactivatedBannerState();
+}
+
+class _UnactivatedBannerState extends ConsumerState<UnactivatedBanner> {
+  late String _deviceId;
+
+  @override
+  void initState() {
+    super.initState();
+    _deviceId = DeviceIdentityService.cachedDeviceId ?? '...';
+    _resolveDeviceId();
+  }
+
+  Future<void> _resolveDeviceId() async {
+    final id = await DeviceIdentityService.getDeviceId();
+    if (mounted && id != _deviceId) {
+      setState(() {
+        _deviceId = id;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isExpired = widget.info.status == SubscriptionStatus.expired;
     final title = isExpired
         ? 'Masa Aktif Lisensi Berakhir'
         : 'Aplikasi Belum Diaktivasi';
-    // Copywriting diselaraskan anti-slop: kata 'iuran' dihindari di Dashboard
-    // dan digantikan 'kas siswa' sesuai konvensi sistem.
     final desc = isExpired
         ? 'Fitur pencatatan kas, kas siswa, dan laporan terkunci. Perpanjang lisensi untuk melanjutkan.'
         : 'Aktifkan lisensi 28 hari (Rp 25.000) untuk mencatat kas, kelola kas siswa, dan ekspor laporan.';
-
-    final deviceId = DeviceIdentityService.cachedDeviceId ?? '...';
 
     return Container(
       padding: const EdgeInsets.all(14),
@@ -196,7 +222,7 @@ class UnactivatedBanner extends ConsumerWidget {
                             ),
                           ),
                           child: Text(
-                            'ID: $deviceId',
+                            'ID: $_deviceId',
                             style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w700,
@@ -246,7 +272,7 @@ class UnactivatedBanner extends ConsumerWidget {
                       fontWeight: FontWeight.w700,
                     ),
                   ),
-                  onPressed: () => _launchWhatsApp(context, deviceId),
+                  onPressed: () => UnactivatedBanner.launchWhatsApp(context, _deviceId),
                 ),
               ),
               const SizedBox(width: 8),

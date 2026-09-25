@@ -7,6 +7,7 @@ import '../../../core/license/device_identity_service.dart';
 import '../../../core/license/license_engine.dart';
 import '../../providers/app_providers.dart';
 import '../../providers/subscription_notifier.dart';
+import '../../widgets/unactivated_banner.dart';
 
 /// Paywall modal/bottom sheet untuk model freemium "explore-first".
 ///
@@ -571,6 +572,30 @@ class _PaywallSheetState extends ConsumerState<PaywallSheet> {
                             : 'Aktivasi Sekarang',
                       ),
                       onPressed: _isSubmitting ? null : _activate,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 44,
+                    child: OutlinedButton.icon(
+                      key: const ValueKey('paywall_whatsapp_btn'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF15803D),
+                        side: const BorderSide(color: Color(0xFF22C55E)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      icon: const Icon(Icons.chat_rounded, size: 16),
+                      label: const Text(
+                        'Belum punya kode? Beli via WhatsApp',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      onPressed: () => UnactivatedBanner.launchWhatsApp(context, _deviceId),
                     ),
                   ),
                   const SizedBox(height: 8),
