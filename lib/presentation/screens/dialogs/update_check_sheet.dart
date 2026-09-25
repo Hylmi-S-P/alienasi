@@ -648,7 +648,7 @@ class _DownloadingBody extends StatelessWidget {
 }
 
 /// 3. SUCCESS STATE: Ketika berkas berhasil diunduh dan siap dipasang.
-class _ReadyToInstallBody extends StatefulWidget {
+class _ReadyToInstallBody extends ConsumerStatefulWidget {
   const _ReadyToInstallBody({
     required this.state,
     required this.onInstall,
@@ -658,12 +658,14 @@ class _ReadyToInstallBody extends StatefulWidget {
   final Future<bool> Function() onInstall;
 
   @override
-  State<_ReadyToInstallBody> createState() => _ReadyToInstallBodyState();
+  ConsumerState<_ReadyToInstallBody> createState() =>
+      _ReadyToInstallBodyState();
 }
 
-class _ReadyToInstallBodyState extends State<_ReadyToInstallBody>
+class _ReadyToInstallBodyState extends ConsumerState<_ReadyToInstallBody>
     with WidgetsBindingObserver {
-  bool _canInstall = true;
+  bool _canInstall =
+      !Platform.isAndroid || Platform.environment.containsKey('FLUTTER_TEST');
   bool _isCheckingPermission = false;
 
   @override
@@ -689,7 +691,8 @@ class _ReadyToInstallBodyState extends State<_ReadyToInstallBody>
   Future<void> _checkPermission() async {
     if (_isCheckingPermission) return;
     _isCheckingPermission = true;
-    final can = await ApkInstallerService.canRequestPackageInstalls();
+    final checker = ref.read(canRequestPackageInstallsProvider);
+    final can = await checker();
     if (mounted) {
       setState(() {
         _canInstall = can;
@@ -862,7 +865,7 @@ class _ReadyToInstallBodyState extends State<_ReadyToInstallBody>
                 const SizedBox(height: 6),
                 _buildStep(
                   '3',
-                  'Kembali ke aplikasi ini, lalu tekan "Pasang Pembaruan Sekarang".',
+                  'Kembali ke aplikasi ini, tombol pasang akan otomatis terbuka dan aktif.',
                 ),
               ],
             ),
@@ -886,7 +889,7 @@ class _ReadyToInstallBodyState extends State<_ReadyToInstallBody>
               ),
               icon: const Icon(Icons.settings_suggest_rounded, size: 18),
               label: const Text('1. Buka Pengaturan Izin'),
-              onPressed: () => ApkInstallerService.openUnknownAppsSettings(),
+              onPressed: () => ref.read(openUnknownAppsSettingsProvider)(),
             ),
           ),
           const SizedBox(height: 8),
@@ -896,19 +899,31 @@ class _ReadyToInstallBodyState extends State<_ReadyToInstallBody>
             child: OutlinedButton.icon(
               key: const ValueKey('update_install_btn'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: AppColors.brandPrimary,
-                side: const BorderSide(color: AppColors.brandPrimary),
+                foregroundColor: AppColors.textMuted,
+                disabledForegroundColor: AppColors.textMuted,
+                side: const BorderSide(color: AppColors.borderSubtle),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
                 ),
                 textStyle: const TextStyle(
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              icon: const Icon(Icons.install_mobile_rounded, size: 18),
-              label: const Text('2. Pasang Pembaruan Sekarang'),
-              onPressed: () => _handleInstall(context),
+              icon: const Icon(Icons.lock_rounded, size: 18, color: AppColors.textMuted),
+              label: const Text('2. Pasang Pembaruan (Terkunci)'),
+              onPressed: null, // Dinonaktifkan: pengguna tidak bisa memencet sampai izin terpenuhi
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Center(
+            child: Text(
+              'Tombol terkunci sampai izin "Sumber Ini" diaktifkan di Android.',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted,
+                fontWeight: FontWeight.w500,
+              ),
             ),
           ),
         ] else ...[
@@ -980,7 +995,7 @@ class _ReadyToInstallBodyState extends State<_ReadyToInstallBody>
                 padding: const EdgeInsets.symmetric(horizontal: 8),
                 minimumSize: const Size(0, 32),
               ),
-              onPressed: () => ApkInstallerService.openUnknownAppsSettings(),
+              onPressed: () => ref.read(openUnknownAppsSettingsProvider)(),
               child: const Text('Buka Izin', style: TextStyle(fontSize: 11)),
             ),
           ],
@@ -1027,6 +1042,17 @@ class _ReadyToInstallBodyState extends State<_ReadyToInstallBody>
   }
 
   Future<void> _handleInstall(BuildContext context) async {
+    final checker = ref.read(canRequestPackageInstallsProvider);
+    final can = await checker();
+    if (!can) {
+      if (mounted) {
+        setState(() => _canInstall = false);
+      }
+      final opener = ref.read(openUnknownAppsSettingsProvider);
+      await opener();
+      return;
+    }
+
     final launched = await widget.onInstall();
     if (!context.mounted) return;
     if (!launched) {

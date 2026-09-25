@@ -68,6 +68,22 @@ final apkInstallTriggerProvider = Provider<ApkInstallTrigger>((ref) {
   return ApkInstallerService.installApk;
 });
 
+/// Titik injeksi pemeriksaan izin instalasi (REQUEST_INSTALL_PACKAGES).
+typedef CanRequestPackageInstallsChecker = Future<bool> Function();
+
+final canRequestPackageInstallsProvider =
+    Provider<CanRequestPackageInstallsChecker>((ref) {
+  return ApkInstallerService.canRequestPackageInstalls;
+});
+
+/// Titik injeksi pembuka pengaturan izin instalasi aplikasi tidak dikenal.
+typedef OpenUnknownAppsSettingsTrigger = Future<bool> Function();
+
+final openUnknownAppsSettingsProvider =
+    Provider<OpenUnknownAppsSettingsTrigger>((ref) {
+  return ApkInstallerService.openUnknownAppsSettings;
+});
+
 /// Titik injeksi penentu lokasi unduhan; pengujian memakai direktori
 /// sementara yang bisa diperiksa.
 typedef ApkDownloadDirectoryResolver = Future<Directory> Function();
