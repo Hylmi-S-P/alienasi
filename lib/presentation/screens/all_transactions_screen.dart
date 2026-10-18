@@ -51,7 +51,7 @@ class _AllTransactionsScreenState extends ConsumerState<AllTransactionsScreen> {
   }
 
   Future<void> _deleteTransaction(TransactionWithCategory item) async {
-    final allowed = await runMutationWithGuard(
+    await runMutationWithGuard(
       context,
       ref,
       mutationLabel: 'Hapus Transaksi',

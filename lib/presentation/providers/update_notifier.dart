@@ -272,13 +272,12 @@ class UpdateNotifier extends Notifier<UpdateState> {
       if (!ref.mounted) return;
 
       if (!Platform.environment.containsKey('FLUTTER_TEST') &&
-          result.isUpdateAvailable &&
-          result.manifest != null) {
+          result.isUpdateAvailable) {
         String? cachedApkPath;
         try {
           final directory = await ref.read(apkDownloadDirectoryProvider)();
           final destination =
-              '${directory.path}/BendaharaAlien-${result.manifest!.latestVersion}.apk';
+              '${directory.path}/BendaharaAlien-${result.manifest.latestVersion}.apk';
           final file = File(destination);
           if (await file.exists() && (await file.length()) > 0) {
             cachedApkPath = destination;
